@@ -1,10 +1,23 @@
-# Meetrobot Monorepo (Telegram-first)
+# Step 2 Summary — Workspace Onboarding via Telegram
 
-## Structure
-- `backend/` — NestJS API + grammY bot + BullMQ + Prisma
-- `frontend/` — Telegram Web App (React + Vite)
-- `infra/` — nginx and environment templates for VDS deploy (pm2, no Docker)
-- `tests/` — placeholders for backend/bot/frontend tests
+## Implemented Logic
+- **User Discovery**: Automated `User` entity creation upon `/start` command using Telegram `user_id`.
+- **Workspace Creation**: Automatic creation of a default Workspace for new users in private chats.
+- **Transactional Integrity**: Workspace and Owner-Membership are created within a single Prisma transaction.
+- **Idempotency**: The system checks for existing owned workspaces to prevent duplicates.
+- **Mandatory Structure**: Refactored backend to follow the strict directory structure defined in `AGENTS.md`.
+
+## Database Schema Diff (Prisma)
+- Replaced `cuid()` with `uuid()` for all IDs.
+- Added `ownerId` to `Workspace` model.
+- Simplified `WorkspaceMember.role` to a `String` (defaults to `MEMBER`).
+- Removed premature models and enums to focus on MVP Step 2.
+
+## Known Limitations
+- **Webhook Infrastructure**: Integration is prepared but currently runs via polling for development simplicity until VDS/Nginx setup is finalized.
+- **No Manual Naming**: Workspace name is currently hardcoded as `{FirstName}'s Workspace`.
+
+---
 
 ## Principles
 - Telegram-first UX (private + group chats)

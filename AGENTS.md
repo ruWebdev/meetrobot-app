@@ -1,276 +1,258 @@
-# Agents.md
-
-## Project overview
-
-Telegram-first system for managing events, schedules, one-time bookings, and organizational workflows.
-
-The entire user interaction MUST be performed via:
-
-* Telegram Bot (private chats and group chats)
-* Telegram Web App (SPA)
-
-No standalone admin panels, desktop apps, or external browser workflows are allowed.
+# AI AGENT TECHNICAL SPECIFICATION
+## Step 1 — Project Bootstrap & Core Architecture
 
 ---
 
-## Core principles
+## 0. Role & Responsibility of the AI Agent
 
-* Telegram is the primary UI and identity provider
-* There is NO global admin
-* Any user can create and own their own organizational structure (Workspace)
-* Architecture must support:
+You are an **implementation AI agent**, not an architect and not a product manager.
 
-  * individual professionals (e.g. hairdresser)
-  * teams / collectives (e.g. orchestra)
-  * companies / event organizers
-* One backend codebase serves all use cases
+Your responsibilities:
+- Implement code strictly according to this specification
+- Follow the defined tech stack and architectural rules
+- Never introduce technologies, abstractions, or patterns not explicitly allowed
+- Prefer clarity and maintainability over cleverness
+- Produce deterministic, reproducible results
+
+You must **not**:
+- Change the tech stack
+- Introduce Docker, containerization, or cloud services
+- Add global admins or cross-workspace permissions
+- Embed business logic in UI layers
 
 ---
 
-## Technology stack (fixed)
+## 1. Project Goal (MVP Scope)
+
+Build a **Telegram-first, workspace-based system** that supports:
+- Telegram Bot (private chats + groups)
+- Telegram Web App (admin / extended UI)
+- Backend-driven business logic
+- Workspace-scoped roles and entities
+
+This step covers **only project bootstrap and core foundation**, not business features.
+
+---
+
+## 2. Approved Tech Stack (STRICT)
 
 ### Backend
+- Node.js (LTS)
+- TypeScript
+- NestJS
+- PostgreSQL
+- Prisma ORM
+- Redis
+- BullMQ
+- grammY (Telegram Bot API)
+- pm2
 
-* Node.js (LTS)
-* TypeScript
-* NestJS (modular architecture)
-* grammY (Telegram Bot API)
-* PostgreSQL
-* Prisma ORM
-* Redis
-* BullMQ (queues, delayed jobs)
-
-### Frontend (Telegram Web App)
-
-* React
-* Vite
-* TypeScript
-* Telegram Web Apps API
-* SPA architecture
+### Frontend
+- React
+- TypeScript
+- Vite
+- Telegram Web Apps API
 
 ### Infrastructure
+- Ubuntu 22.04
+- nginx
+- `.env` for configuration
+- **NO Docker**
+- **NO Docker Compose**
 
-* Ubuntu 22.04 (VDS)
-* Nginx (reverse proxy)
-* pm2 (process manager)
-* Telegram webhooks ONLY (no long polling)
-
----
-
-## Explicit exclusions
-
-* Docker and Docker Compose are NOT used
-* No containerization of any kind
-* No long polling
-* No external admin UI
-* No role called "superadmin" or "system admin"
+Any deviation is forbidden.
 
 ---
 
-## Workspace model (critical)
+## 3. High-Level Architecture Principles
 
-### Definition
+1. **Backend is the single source of truth**
+   - All business logic lives in backend services
+   - Bot and Web App are orchestration / UI layers only
 
-A Workspace represents an independent organizational unit.
+2. **Workspace-centric model**
+   - All entities belong to a Workspace
+   - No global admin
+   - Permissions are always scoped per Workspace
 
-Examples:
+3. **Modular NestJS architecture**
+   - Each domain = isolated module
+   - No god-modules
+   - Clear dependency direction
 
-* Hairdresser + their clients
-* Orchestra + musicians
-* Company + employees
-* Event organizer + participants
-
-Each Workspace is fully isolated from others.
-
----
-
-### Workspace creation
-
-* Any Telegram user can create a Workspace
-* Creator automatically becomes **Workspace Owner**
-* No approval or system-level moderation exists
+4. **Telegram-first**
+   - Bot works without Web App
+   - Web App enhances, not replaces bot flows
 
 ---
 
-### Workspace roles (RBAC)
+## 4. Repository Structure (MANDATORY)
 
-RBAC is scoped per Workspace.
+```
+/backend
+  /src
+    /app
+      app.module.ts
+    /modules
+      /core
+      /workspace
+      /user
+      /auth
+      /telegram
+    /infra
+      /prisma
+      /redis
+      /queue
+    main.ts
+  prisma
+    schema.prisma
+  .env.example
+  tsconfig.json
 
-Mandatory roles:
+/frontend
+  /src
+    /app
+    /pages
+    /shared
+    main.tsx
+  index.html
+  vite.config.ts
 
-* OWNER
+/nginx
+  backend.conf
+  frontend.conf
 
-  * Full access
-  * Can manage members, roles, settings
-  * Can delete Workspace
-
-* MANAGER
-
-  * Can create and manage events
-  * Can manage schedules
-  * Can send notifications
-
-* MEMBER
-
-  * Can view events and schedules
-  * Can respond to invitations
-
-* GUEST
-
-  * Limited access
-  * Usually external participants
-
-RBAC rules must be enforced on both:
-
-* Telegram bot actions
-* Web App API requests
-
----
-
-## User model
-
-* A User is identified by Telegram `user_id`
-* A User can belong to multiple Workspaces
-* A User can have different roles in different Workspaces
-
-No separate authentication system is allowed.
+/docs
+  architecture.md
+  decisions.md
+```
 
 ---
 
-## Telegram interaction model
+## 5. Step 1 Scope — What to Implement
 
-### Private chat
+### 5.1 Backend Bootstrap
 
-Used for:
+You must:
 
-* Workspace creation
-* Workspace switching
-* Personal notifications
-* Invitations
-* Role-based actions
+1. Initialize NestJS project in `/backend`
+2. Configure:
+   - TypeScript
+   - Environment variables
+   - Global validation pipe
+3. Integrate Prisma:
+   - PostgreSQL connection
+   - Base schema
+4. Integrate Redis + BullMQ (no jobs yet)
+5. Prepare grammY integration (no commands yet)
+6. pm2-ready startup script
+
+No business logic at this stage.
 
 ---
 
-### Group chat integration (mandatory)
+### 5.2 Prisma Base Schema (Initial)
 
-The bot MUST support being added to Telegram groups.
+You must define **minimum viable schema**:
 
-Use cases:
+```prisma
+Workspace
+- id
+- name
+- createdAt
 
-* Orchestra group
-* Team chat
-* Event group
+User
+- id
+- telegramId
+- createdAt
+
+WorkspaceMember
+- id
+- workspaceId
+- userId
+- role
+```
 
 Rules:
-
-* Group chat is optionally linked to a Workspace
-* Group chat can be linked to ONE Workspace only
-* Group messages can trigger:
-
-  * reminders
-  * attendance checks
-  * announcements
-
-Bot MUST:
-
-* Detect group context
-* Respect Workspace RBAC
-* Never expose private data in groups
+- No enums explosion
+- No premature optimization
+- UUIDs only
 
 ---
 
-## Event & scheduling model
+### 5.3 Core Modules (Empty but Wired)
 
-System must support:
+Create empty, compilable NestJS modules:
 
-* One-time events (concerts, meetings)
-* Repeating events (rehearsals, classes)
-* One-time bookings (appointments)
+- CoreModule
+- WorkspaceModule
+- UserModule
+- AuthModule
+- TelegramModule
 
-Common properties:
-
-* time
-* place (optional)
-* participants
-* confirmation / decline
-
-Attendance tracking is REQUIRED.
+Each module must:
+- Have its own folder
+- Export a Module class
+- Be registered in AppModule
 
 ---
 
-## Notifications & jobs
+## 6. Telegram Integration Rules (Preparation Only)
 
-* All reminders and delayed actions are handled via BullMQ
-* Redis is mandatory
-* Jobs include:
-
-  * event reminders
-  * follow-ups
-  * attendance deadlines
-
-No cron-only logic allowed.
+- Webhooks only (no polling)
+- No bot commands yet
+- No message handlers yet
+- Only infrastructure wiring
 
 ---
 
-## Backend architecture rules
+## 7. Forbidden Actions
 
-* NestJS modules must be domain-driven
+The agent must NOT:
 
-* Clear separation:
-
-  * bot layer
-  * api layer (for Web App)
-  * domain logic
-  * persistence
-
-* Business logic MUST NOT live inside bot handlers
-
----
-
-## Frontend (Web App) rules
-
-* Web App is context-aware (Workspace-aware)
-* No routing outside SPA
-* Authentication is based on Telegram init data
-* UI must respect RBAC
+- Implement UI screens
+- Add payment logic
+- Add analytics
+- Add role hierarchies beyond placeholder
+- Add “future-proof” abstractions
+- Add Docker or containers
+- Skip documentation
 
 ---
 
-## Deployment rules (strict)
+## 8. Documentation Required
 
-* Deployment is performed directly on VDS
-* No Docker usage
-* Backend and bot run via pm2
-* Prisma migrations run on host
-* Environment variables via `.env`
-* Nginx serves:
+Create `/docs/architecture.md` containing:
+- Module responsibility overview
+- Data ownership rules
+- Dependency direction
 
-  * Web App static files
-  * Backend API via reverse proxy
-
----
-
-## AI agent behavior constraints
-
-* Agent MUST follow this document strictly
-* Agent MUST NOT introduce new technologies
-* Agent MUST NOT ask architectural questions already defined here
-* Agent MUST implement MVP-first, no overengineering
-* If something is ambiguous, choose the simplest solution
+Create `/docs/decisions.md` containing:
+- Why NestJS
+- Why Prisma
+- Why Telegram-first
 
 ---
 
-## MVP priority rule
+## 9. Output Expectations
 
-If functionality is not required for:
-
-* Workspace creation
-* Event creation
-* Scheduling
-* Notifications
-
-…it MUST be postponed.
+After Step 1:
+- Project must compile
+- Database migrations must run
+- Bot process must start (even if idle)
+- Codebase must be clean, readable, boring
 
 ---
 
-## End of document
+## 10. How to Proceed After Completion
+
+After finishing Step 1, the agent must STOP.
+
+Do NOT continue to Step 2 unless explicitly instructed.
+
+Agent must provide:
+- Summary of completed items
+- List of created files
+- Known limitations
+
+END OF SPEC

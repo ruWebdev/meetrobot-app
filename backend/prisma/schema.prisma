@@ -11,94 +11,30 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   telegramId  String   @unique
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
   memberships WorkspaceMember[]
+  workspaces  Workspace[]
 }
 
 model Workspace {
-  id           String             @id @default(cuid())
+  id           String             @id @default(uuid())
   name         String
+  ownerId      String
+  owner        User               @relation(fields: [ownerId], references: [id])
   createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
   members      WorkspaceMember[]
-  events       Event[]
-  services     Service[]
-  bookings     Booking[]
-  integrations WorkspaceIntegration?
 }
 
 model WorkspaceMember {
-  id          String    @id @default(cuid())
-  role        Role      @default(MEMBER)
+  id          String    @id @default(uuid())
+  role        String    @default("MEMBER")
   user        User      @relation(fields: [userId], references: [id])
   userId      String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
   createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
 
   @@unique([userId, workspaceId])
-}
-
-enum Role {
-  OWNER
-  MANAGER
-  MEMBER
-  GUEST
-}
-
-model WorkspaceIntegration {
-  id          String    @id @default(cuid())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  workspaceId String    @unique
-  groupChatId String?
-  createdAt   DateTime  @default(now())
-}
-
-model Event {
-  id           String     @id @default(cuid())
-  workspace    Workspace  @relation(fields: [workspaceId], references: [id])
-  workspaceId  String
-  title        String
-  startsAt     DateTime
-  endsAt       DateTime?
-  location     String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  bookings     Booking[]
-}
-
-model Service {
-  id           String     @id @default(cuid())
-  workspace    Workspace  @relation(fields: [workspaceId], references: [id])
-  workspaceId  String
-  name         String
-  durationMin  Int?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  bookings     Booking[]
-}
-
-model Booking {
-  id           String     @id @default(cuid())
-  workspace    Workspace  @relation(fields: [workspaceId], references: [id])
-  workspaceId  String
-  event        Event?     @relation(fields: [eventId], references: [id])
-  eventId      String?
-  service      Service?   @relation(fields: [serviceId], references: [id])
-  serviceId    String?
-  user         User?      @relation(fields: [userId], references: [id])
-  userId       String?
-  status       BookingStatus @default(PENDING)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-}
-
-enum BookingStatus {
-  PENDING
-  CONFIRMED
-  CANCELLED
 }
