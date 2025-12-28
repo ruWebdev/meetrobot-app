@@ -4,7 +4,7 @@ module.exports = {
     apps: [
         {
             name: 'meetrobot-backend',
-            script: './backend/dist/main.js',
+            script: 'dist/main.js',
             cwd: path.join(__dirname, 'backend'),
             instances: 1,
             autorestart: true,
