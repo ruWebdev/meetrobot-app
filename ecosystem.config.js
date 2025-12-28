@@ -1,9 +1,11 @@
+const path = require('path');
+
 module.exports = {
     apps: [
         {
             name: 'meetrobot-backend',
-            cwd: './backend',
-            script: 'dist/main.js',
+            script: './backend/dist/main.js',
+            cwd: path.join(__dirname, 'backend'),
             instances: 1,
             autorestart: true,
             watch: false,

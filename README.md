@@ -25,7 +25,7 @@ This repository currently contains scaffolding and contracts for the MVP. Implem
 4. Serve backend via pm2; frontend via nginx static hosting; Telegram webhooks via nginx reverse proxy.
 
 ## Deployment with PM2 (VDS)
-For production deployment on a VDS, use PM2 to manage the backend process:
+**Note:** Always run the build command **on the server** after pulling new code before restarting PM2.
 
 1. Build both parts:
    ```bash
@@ -43,4 +43,10 @@ For production deployment on a VDS, use PM2 to manage the backend process:
    pm2 restart all     # Restart processes
    pm2 stop all        # Stop processes
    ```
+4. Persistence (survive reboots):
+   ```bash
+   pm2 save            # Save current process list
+   pm2 startup         # Follow instructions to setup startup script
+   ```
+
 
