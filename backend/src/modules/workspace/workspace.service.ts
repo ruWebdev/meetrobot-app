@@ -46,6 +46,58 @@ export class WorkspaceService {
         });
     }
 
+    async connectTelegramGroup(params: {
+        telegramId: string;
+        telegramChatId: string;
+        title: string;
+        type: 'group' | 'supergroup';
+    }) {
+        const telegramId = params.telegramId.toString();
+        const telegramChatId = params.telegramChatId.toString();
+
+        return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            const user = await tx.user.findUnique({
+                where: { telegramId },
+            });
+
+            if (!user) {
+                return { ok: false as const, reason: 'USER_NOT_FOUND' as const };
+            }
+
+            const memberships = await tx.workspaceMember.findMany({
+                where: { userId: user.id },
+            });
+
+            if (memberships.length !== 1) {
+                return { ok: false as const, reason: 'MULTIPLE_WORKSPACES' as const };
+            }
+
+            const membership = memberships[0];
+            if (membership.role !== 'OWNER') {
+                return { ok: false as const, reason: 'NOT_OWNER' as const };
+            }
+
+            const existingGroup = await tx.telegramGroup.findUnique({
+                where: { telegramChatId },
+            });
+
+            if (existingGroup) {
+                return { ok: false as const, reason: 'ALREADY_CONNECTED' as const };
+            }
+
+            const created = await tx.telegramGroup.create({
+                data: {
+                    telegramChatId,
+                    title: params.title,
+                    type: params.type,
+                    workspaceId: membership.workspaceId,
+                },
+            });
+
+            return { ok: true as const, telegramGroupId: created.id, workspaceId: created.workspaceId };
+        });
+    }
+
     async createWorkspace(ownerId: string, name: string) {
         return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const workspace = await tx.workspace.create({

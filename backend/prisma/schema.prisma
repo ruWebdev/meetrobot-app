@@ -25,6 +25,7 @@ model Workspace {
   owner        User               @relation(fields: [ownerId], references: [id])
   createdAt    DateTime           @default(now())
   members      WorkspaceMember[]
+  telegramGroups TelegramGroup[]
 }
 
 model WorkspaceMember {
@@ -37,4 +38,14 @@ model WorkspaceMember {
   createdAt   DateTime  @default(now())
 
   @@unique([userId, workspaceId])
+}
+
+model TelegramGroup {
+  id             String    @id @default(uuid())
+  telegramChatId String    @unique
+  title          String
+  type           String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId    String
+  createdAt      DateTime  @default(now())
 }
