@@ -13,9 +13,12 @@ datasource db {
 model User {
   id          String   @id @default(uuid())
   telegramId  String   @unique
+  name        String?
   createdAt   DateTime @default(now())
   memberships WorkspaceMember[]
   workspaces  Workspace[]
+  participations Participation[]
+  changeLogs ChangeLog[]
 }
 
 model Workspace {
@@ -26,6 +29,7 @@ model Workspace {
   createdAt    DateTime           @default(now())
   members      WorkspaceMember[]
   telegramGroups TelegramGroup[]
+  events Event[]
 }
 
 model WorkspaceMember {
@@ -48,4 +52,83 @@ model TelegramGroup {
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId    String
   createdAt      DateTime  @default(now())
+}
+
+model Event {
+  id            String   @id @default(uuid())
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId   String
+
+  type          String   @default("MEETING")
+  startAt       DateTime?
+  endAt         DateTime?
+  proposedSlots Json?
+
+  parentEvent   Event?   @relation("EventToSubEvents", fields: [parentEventId], references: [id], onDelete: Cascade)
+  parentEventId String?
+  subEvents     Event[]  @relation("EventToSubEvents")
+
+  title         String
+  date          DateTime
+  timeStart     String
+  timeEnd       String
+  location      String?
+  status        String
+
+  participations Participation[]
+  changeLogs     ChangeLog[]
+  conflicts      Conflict[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([parentEventId])
+}
+
+model Participation {
+  id               String   @id @default(uuid())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId          String
+
+  availabilityStatus String @default("UNKNOWN")
+  responseStatus   String   @default("pending")
+  attendanceStatus String   @default("unknown")
+  arrivedAt        DateTime?
+  latenessMinutes  Int?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, eventId])
+  @@index([eventId])
+}
+
+model ChangeLog {
+  id           String   @id @default(uuid())
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId      String
+  fieldChanged String
+  oldValue     String
+  newValue     String
+  changedBy    User     @relation(fields: [changedById], references: [id], onDelete: Cascade)
+  changedById  String
+  changedAt    DateTime @default(now())
+
+  @@index([eventId])
+}
+
+model Conflict {
+  id        String   @id @default(uuid())
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@index([eventId])
 }
