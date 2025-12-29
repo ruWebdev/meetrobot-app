@@ -17,6 +17,7 @@ const user_module_1 = require("../modules/user/user.module");
 const workspace_module_1 = require("../modules/workspace/workspace.module");
 const auth_module_1 = require("../modules/auth/auth.module");
 const telegram_module_1 = require("../modules/telegram/telegram.module");
+const events_module_1 = require("../modules/events/events.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -34,6 +35,7 @@ exports.AppModule = AppModule = __decorate([
             workspace_module_1.WorkspaceModule,
             auth_module_1.AuthModule,
             telegram_module_1.TelegramModule,
+            events_module_1.EventsModule,
         ],
     })
 ], AppModule);

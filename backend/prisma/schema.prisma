@@ -18,8 +18,7 @@ model User {
   memberships WorkspaceMember[]
   workspaces  Workspace[]
   participations Participation[]
-  conflicts   Conflict[]
-  changeLogs ChangeLog[]
+  createdEvents Event[] @relation("EventCreatedBy")
 }
 
 model Workspace {
@@ -60,31 +59,28 @@ model Event {
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId   String
 
-  type          String   @default("MEETING")
-  startAt       DateTime?
-  endAt         DateTime?
-  proposedSlots Json?
-
   parentEvent   Event?   @relation("EventToSubEvents", fields: [parentEventId], references: [id], onDelete: Cascade)
   parentEventId String?
   subEvents     Event[]  @relation("EventToSubEvents")
 
+  type          String
   title         String
-  date          DateTime
+  description   String?
+  date          DateTime @db.Date
   timeStart     String
   timeEnd       String
-  location      String?
-  status        String
+  location      String
+  status        String   @default("scheduled")
+
+  createdBy     User     @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  createdById   String
+  createdAt     DateTime @default(now())
 
   participations Participation[]
-  changeLogs     ChangeLog[]
-  conflicts      Conflict[]
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
 
   @@index([workspaceId])
   @@index([parentEventId])
+  @@index([createdById])
 }
 
 model Participation {
@@ -94,42 +90,9 @@ model Participation {
   event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   eventId          String
 
-  availabilityStatus String @default("UNKNOWN")
-  responseStatus   String   @default("pending")
-  attendanceStatus String   @default("unknown")
-  arrivedAt        DateTime?
-  latenessMinutes  Int?
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  responseStatus     String   @default("pending")
+  responseUpdatedAt  DateTime?
 
   @@unique([userId, eventId])
-  @@index([eventId])
-}
-
-model ChangeLog {
-  id           String   @id @default(uuid())
-  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  eventId      String
-  fieldChanged String
-  oldValue     String
-  newValue     String
-  changedBy    User     @relation(fields: [changedById], references: [id], onDelete: Cascade)
-  changedById  String
-  changedAt    DateTime @default(now())
-
-  @@index([eventId])
-}
-
-model Conflict {
-  id        String   @id @default(uuid())
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  eventId   String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  createdAt DateTime @default(now())
-
-  @@unique([eventId, userId])
-  @@index([userId])
   @@index([eventId])
 }
