@@ -18,6 +18,7 @@ model User {
   memberships WorkspaceMember[]
   workspaces  Workspace[]
   participations Participation[]
+  conflicts   Conflict[]
   changeLogs ChangeLog[]
 }
 
