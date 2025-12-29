@@ -1,13 +1,13 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Bot, Context } from 'grammy';
+import { Bot } from 'grammy';
 import { UserService } from '../user/user.service';
 import { WorkspaceService } from '../workspace/workspace.service';
 
 @Injectable()
 export class TelegramService implements OnModuleInit {
     private readonly logger = new Logger(TelegramService.name);
-    private bot: Bot;
+    private bot?: Bot;
 
     constructor(
         private configService: ConfigService,
@@ -31,7 +31,10 @@ export class TelegramService implements OnModuleInit {
     }
 
     private setupHandlers() {
-        this.bot.command('start', async (ctx) => {
+        const bot = this.bot;
+        if (!bot) return;
+
+        bot.command('start', async (ctx) => {
             if (ctx.chat.type !== 'private') {
                 return ctx.reply('Workspace creation is only available in private chat.');
             }
@@ -58,7 +61,11 @@ export class TelegramService implements OnModuleInit {
         });
     }
 
-    getBot() {
+    getBot(): Bot {
+        if (!this.bot) {
+            throw new Error('Telegram bot is not initialized (missing TELEGRAM_BOT_TOKEN)');
+        }
+
         return this.bot;
     }
 }

@@ -6,17 +6,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ServiceModule = void 0;
+exports.CoreModule = void 0;
 const common_1 = require("@nestjs/common");
-const service_controller_1 = require("./service.controller");
-const service_service_1 = require("./service.service");
-let ServiceModule = class ServiceModule {
+let CoreModule = class CoreModule {
 };
-exports.ServiceModule = ServiceModule;
-exports.ServiceModule = ServiceModule = __decorate([
-    (0, common_1.Module)({
-        controllers: [service_controller_1.ServiceController],
-        providers: [service_service_1.ServiceService],
-        exports: [service_service_1.ServiceService],
-    })
-], ServiceModule);
+exports.CoreModule = CoreModule;
+exports.CoreModule = CoreModule = __decorate([
+    (0, common_1.Module)({})
+], CoreModule);

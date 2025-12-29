@@ -6,17 +6,14 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ServiceModule = void 0;
+exports.AuthContext = void 0;
 const common_1 = require("@nestjs/common");
-const service_controller_1 = require("./service.controller");
-const service_service_1 = require("./service.service");
-let ServiceModule = class ServiceModule {
+let AuthContext = class AuthContext {
+    userId;
+    workspaceId;
+    role;
 };
-exports.ServiceModule = ServiceModule;
-exports.ServiceModule = ServiceModule = __decorate([
-    (0, common_1.Module)({
-        controllers: [service_controller_1.ServiceController],
-        providers: [service_service_1.ServiceService],
-        exports: [service_service_1.ServiceService],
-    })
-], ServiceModule);
+exports.AuthContext = AuthContext;
+exports.AuthContext = AuthContext = __decorate([
+    (0, common_1.Injectable)({ scope: common_1.Scope.REQUEST })
+], AuthContext);
