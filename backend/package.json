@@ -4,6 +4,9 @@
     "private": true,
     "description": "NestJS backend for Telegram-first workspace-based events and bookings",
     "main": "dist/main.js",
+    "prisma": {
+        "schema": "prisma/schema.prisma"
+    },
     "scripts": {
         "start": "node dist/main.js",
         "start:dev": "nest start --watch",

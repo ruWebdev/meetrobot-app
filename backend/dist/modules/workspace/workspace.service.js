@@ -17,6 +17,75 @@ let WorkspaceService = class WorkspaceService {
     constructor(prisma) {
         this.prisma = prisma;
     }
+    async onboardFromTelegram(params) {
+        const telegramId = params.telegramId.toString();
+        const firstName = params.firstName ?? null;
+        return this.prisma.$transaction(async (tx) => {
+            const user = await tx.user.upsert({
+                where: { telegramId },
+                update: {},
+                create: { telegramId },
+            });
+            const existingMembership = await tx.workspaceMember.findFirst({
+                where: { userId: user.id },
+            });
+            if (existingMembership) {
+                return { created: false, userId: user.id };
+            }
+            const workspaceName = firstName ? `Рабочее пространство ${firstName}` : 'Моё рабочее пространство';
+            const workspace = await tx.workspace.create({
+                data: {
+                    name: workspaceName,
+                    ownerId: user.id,
+                },
+            });
+            await tx.workspaceMember.create({
+                data: {
+                    workspaceId: workspace.id,
+                    userId: user.id,
+                    role: 'OWNER',
+                },
+            });
+            return { created: true, userId: user.id, workspaceId: workspace.id, workspaceName };
+        });
+    }
+    async connectTelegramGroup(params) {
+        const telegramId = params.telegramId.toString();
+        const telegramChatId = params.telegramChatId.toString();
+        return this.prisma.$transaction(async (tx) => {
+            const user = await tx.user.findUnique({
+                where: { telegramId },
+            });
+            if (!user) {
+                return { ok: false, reason: 'USER_NOT_FOUND' };
+            }
+            const memberships = await tx.workspaceMember.findMany({
+                where: { userId: user.id },
+            });
+            if (memberships.length !== 1) {
+                return { ok: false, reason: 'MULTIPLE_WORKSPACES' };
+            }
+            const membership = memberships[0];
+            if (membership.role !== 'OWNER') {
+                return { ok: false, reason: 'NOT_OWNER' };
+            }
+            const existingGroup = await tx.telegramGroup.findUnique({
+                where: { telegramChatId },
+            });
+            if (existingGroup) {
+                return { ok: false, reason: 'ALREADY_CONNECTED' };
+            }
+            const created = await tx.telegramGroup.create({
+                data: {
+                    telegramChatId,
+                    title: params.title,
+                    type: params.type,
+                    workspaceId: membership.workspaceId,
+                },
+            });
+            return { ok: true, telegramGroupId: created.id, workspaceId: created.workspaceId };
+        });
+    }
     async createWorkspace(ownerId, name) {
         return this.prisma.$transaction(async (tx) => {
             const workspace = await tx.workspace.create({

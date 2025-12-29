@@ -26,7 +26,7 @@ let TelegramController = class TelegramController {
         return (0, grammy_1.webhookCallback)(bot, 'express')(req, res);
     }
     async healthCheck() {
-        return { status: 'ok', message: 'Telegram Webhook is active (POST only)' };
+        return { status: 'ok', message: 'Telegram webhook активен (принимает POST)' };
     }
 };
 exports.TelegramController = TelegramController;
