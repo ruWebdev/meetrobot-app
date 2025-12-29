@@ -40,6 +40,78 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const bot = this.bot;
         if (!bot)
             return;
+        bot.command('workspace', async (ctx) => {
+            if (ctx.chat.type === 'private') {
+                return ctx.reply('Эта команда доступна только в группе.');
+            }
+            if (ctx.chat.type === 'channel') {
+                return;
+            }
+            if (ctx.chat.type !== 'group' && ctx.chat.type !== 'supergroup') {
+                return ctx.reply('Эта команда доступна только в группе.');
+            }
+            const telegramChatId = ctx.chat.id.toString();
+            this.logger.log(`Вызов команды /workspace: chatId=${telegramChatId}, type=${ctx.chat.type}`);
+            try {
+                const result = await this.workspaceService.getWorkspaceInfoForTelegramGroup(telegramChatId);
+                if (!result.ok) {
+                    this.logger.log(`Workspace-контекст не найден для /workspace: chatId=${telegramChatId}`);
+                    return ctx.reply('Эта группа не подключена ни к одному Workspace.');
+                }
+                const createdAt = new Date(result.workspace.createdAt).toLocaleDateString('ru-RU');
+                return ctx.reply(`Workspace: ${result.workspace.name}\n` +
+                    `Создан: ${createdAt}\n` +
+                    `Участников: ${result.workspace.membersCount}\n` +
+                    `Подключённых групп: ${result.workspace.telegramGroupsCount}`);
+            }
+            catch (error) {
+                this.logger.error('Ошибка при обработке команды /workspace', error);
+                return ctx.reply('Не удалось выполнить операцию. Попробуйте позже.');
+            }
+        });
+        bot.command('whoami', async (ctx) => {
+            if (ctx.chat.type === 'private') {
+                return ctx.reply('Эта команда доступна только в группе.');
+            }
+            if (ctx.chat.type === 'channel') {
+                return;
+            }
+            if (ctx.chat.type !== 'group' && ctx.chat.type !== 'supergroup') {
+                return ctx.reply('Эта команда доступна только в группе.');
+            }
+            const telegramChatId = ctx.chat.id.toString();
+            this.logger.log(`Вызов команды /whoami: chatId=${telegramChatId}, type=${ctx.chat.type}`);
+            const telegramId = ctx.from?.id?.toString();
+            if (!telegramId) {
+                return ctx.reply('Не удалось выполнить операцию. Попробуйте позже.');
+            }
+            try {
+                const result = await this.workspaceService.getWhoAmIForTelegramGroup({
+                    telegramChatId,
+                    telegramId,
+                });
+                if (!result.ok) {
+                    if (result.reason === 'NO_CONTEXT') {
+                        this.logger.log(`Workspace-контекст не найден для /whoami: chatId=${telegramChatId}`);
+                        return ctx.reply('Эта группа не подключена ни к одному Workspace.');
+                    }
+                    if (result.reason === 'USER_NOT_REGISTERED') {
+                        return ctx.reply('Вы пока не зарегистрированы в системе.');
+                    }
+                    return ctx.reply('Не удалось выполнить операцию. Попробуйте позже.');
+                }
+                if (!result.isMember) {
+                    return ctx.reply(`Workspace: ${result.workspaceName}\n` +
+                        'Вы не состоите в этом Workspace.');
+                }
+                return ctx.reply(`Workspace: ${result.workspaceName}\n` +
+                    `Роль: ${result.role}`);
+            }
+            catch (error) {
+                this.logger.error('Ошибка при обработке команды /whoami', error);
+                return ctx.reply('Не удалось выполнить операцию. Попробуйте позже.');
+            }
+        });
         bot.command('start', async (ctx) => {
             if (ctx.chat.type !== 'private') {
                 return ctx.reply('Создание рабочего пространства доступно только в личном чате с ботом.');

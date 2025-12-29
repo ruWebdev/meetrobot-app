@@ -17,6 +17,84 @@ let WorkspaceService = class WorkspaceService {
     constructor(prisma) {
         this.prisma = prisma;
     }
+    async resolveWorkspaceByTelegramChatId(telegramChatId) {
+        const chatId = telegramChatId.toString();
+        const tgGroup = await this.prisma.telegramGroup.findUnique({
+            where: { telegramChatId: chatId },
+            select: { workspaceId: true },
+        });
+        if (!tgGroup)
+            return null;
+        return this.prisma.workspace.findUnique({
+            where: { id: tgGroup.workspaceId },
+            select: {
+                id: true,
+                name: true,
+                createdAt: true,
+                _count: {
+                    select: {
+                        members: true,
+                        telegramGroups: true,
+                    },
+                },
+            },
+        });
+    }
+    async getWorkspaceInfoForTelegramGroup(telegramChatId) {
+        const workspace = await this.resolveWorkspaceByTelegramChatId(telegramChatId);
+        if (!workspace) {
+            return { ok: false, reason: 'NO_CONTEXT' };
+        }
+        return {
+            ok: true,
+            workspace: {
+                id: workspace.id,
+                name: workspace.name,
+                createdAt: workspace.createdAt,
+                membersCount: workspace._count.members,
+                telegramGroupsCount: workspace._count.telegramGroups,
+            },
+        };
+    }
+    async getWhoAmIForTelegramGroup(params) {
+        const telegramChatId = params.telegramChatId.toString();
+        const telegramId = params.telegramId.toString();
+        const workspace = await this.resolveWorkspaceByTelegramChatId(telegramChatId);
+        if (!workspace) {
+            return { ok: false, reason: 'NO_CONTEXT' };
+        }
+        const user = await this.prisma.user.findUnique({
+            where: { telegramId },
+            select: { id: true },
+        });
+        if (!user) {
+            return { ok: false, reason: 'USER_NOT_REGISTERED' };
+        }
+        const membership = await this.prisma.workspaceMember.findUnique({
+            where: {
+                userId_workspaceId: {
+                    userId: user.id,
+                    workspaceId: workspace.id,
+                },
+            },
+            select: { role: true },
+        });
+        if (!membership) {
+            return {
+                ok: true,
+                registered: true,
+                isMember: false,
+                workspaceName: workspace.name,
+            };
+        }
+        return {
+            ok: true,
+            registered: true,
+            isMember: true,
+            role: membership.role,
+            workspaceName: workspace.name,
+        };
+    }
     async onboardFromTelegram(params) {
         const telegramId = params.telegramId.toString();
         const firstName = params.firstName ?? null;
