@@ -60,6 +60,9 @@ This step covers **only project bootstrap and core foundation**, not business fe
 - **NO Docker**
 - **NO Docker Compose**
 
+### Language
+- All text in user interface must be in **RUSSIAN**
+
 Any deviation is forbidden.
 
 ---

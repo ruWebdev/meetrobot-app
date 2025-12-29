@@ -1,7 +1,6 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Bot } from 'grammy';
-import { UserService } from '../user/user.service';
 import { WorkspaceService } from '../workspace/workspace.service';
 
 @Injectable()
@@ -11,12 +10,11 @@ export class TelegramService implements OnModuleInit {
 
     constructor(
         private configService: ConfigService,
-        private userService: UserService,
         private workspaceService: WorkspaceService,
     ) {
         const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
         if (!token) {
-            this.logger.error('TELEGRAM_BOT_TOKEN is not defined');
+            this.logger.error('Переменная окружения TELEGRAM_BOT_TOKEN не задана');
             return;
         }
         this.bot = new Bot(token);
@@ -27,7 +25,7 @@ export class TelegramService implements OnModuleInit {
 
         this.setupHandlers();
 
-        this.logger.log('Telegram bot handlers initialized for webhooks');
+        this.logger.log('Обработчики Telegram-бота инициализированы для webhook');
     }
 
     private setupHandlers() {
@@ -36,34 +34,33 @@ export class TelegramService implements OnModuleInit {
 
         bot.command('start', async (ctx) => {
             if (ctx.chat.type !== 'private') {
-                return ctx.reply('Workspace creation is only available in private chat.');
+                return ctx.reply('Создание рабочего пространства доступно только в личном чате с ботом.');
             }
 
             const telegramId = ctx.from?.id.toString();
             if (!telegramId) return;
 
             try {
-                const user = await this.userService.findOrCreateUser(telegramId);
-                const ownedWorkspace = await this.workspaceService.findUserOwnedWorkspace(user.id);
+                const result = await this.workspaceService.onboardFromTelegram({
+                    telegramId,
+                    firstName: ctx.from?.first_name ?? null,
+                });
 
-                if (ownedWorkspace) {
-                    return ctx.reply('You already have a workspace.');
+                if (!result.created) {
+                    return ctx.reply('Рабочее пространство уже создано.');
                 }
 
-                const workspaceName = `${ctx.from?.first_name || 'My'}'s Workspace`;
-                await this.workspaceService.createWorkspace(user.id, workspaceName);
-
-                await ctx.reply(`Workspace "${workspaceName}" created! You are now the OWNER.`);
+                return ctx.reply(`Рабочее пространство «${result.workspaceName}» создано. Вы назначены владельцем.`);
             } catch (error) {
-                this.logger.error('Error in /start command', error);
-                await ctx.reply('Something went wrong. Please try again later.');
+                this.logger.error('Ошибка при обработке команды /start', error);
+                await ctx.reply('Не удалось выполнить операцию. Попробуйте позже.');
             }
         });
     }
 
     getBot(): Bot {
         if (!this.bot) {
-            throw new Error('Telegram bot is not initialized (missing TELEGRAM_BOT_TOKEN)');
+            throw new Error('Telegram-бот не инициализирован (не задан TELEGRAM_BOT_TOKEN)');
         }
 
         return this.bot;
