@@ -29,6 +29,13 @@ let EventsService = class EventsService {
         if (!user) {
             throw new common_1.NotFoundException('Пользователь не найден');
         }
+        const workspace = await this.prisma.workspace.findUnique({
+            where: { id: dto.workspaceId },
+            select: { id: true },
+        });
+        if (!workspace) {
+            throw new common_1.NotFoundException('Workspace не найден');
+        }
         const membership = await this.prisma.workspaceMember.findUnique({
             where: {
                 userId_workspaceId: {

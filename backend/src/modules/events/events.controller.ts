@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Headers, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Post, UnauthorizedException } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 
@@ -12,7 +12,7 @@ export class EventsController {
         @Body() dto: CreateEventDto,
     ) {
         if (!userId) {
-            throw new BadRequestException('Отсутствует заголовок x-user-id');
+            throw new UnauthorizedException('Отсутствует заголовок x-user-id');
         }
 
         return this.eventsService.createEvent({

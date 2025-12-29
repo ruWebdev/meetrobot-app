@@ -1,7 +1,8 @@
 import React from 'react';
+import CreateEventPage from './pages/CreateEvent';
 
 function App() {
-    return <div>Telegram Web App scaffold</div>;
+    return <CreateEventPage />;
 }
 
 export default App;

@@ -23,7 +23,7 @@ let EventsController = class EventsController {
     }
     async createEvent(userId, dto) {
         if (!userId) {
-            throw new common_1.BadRequestException('Отсутствует заголовок x-user-id');
+            throw new common_1.UnauthorizedException('Отсутствует заголовок x-user-id');
         }
         return this.eventsService.createEvent({
             userId,
