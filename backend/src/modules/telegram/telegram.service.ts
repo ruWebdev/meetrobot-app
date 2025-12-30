@@ -39,12 +39,12 @@ export class TelegramService implements OnModuleInit {
         bot.on('callback_query:data', async (ctx) => {
             const telegramId = ctx.from?.id?.toString();
             if (!telegramId) {
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
             }
 
             const user = await this.userService.findByTelegramId(telegramId);
             if (!user) {
-                return ctx.answerCallbackQuery({ text: 'User not registered', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Пользователь не зарегистрирован', show_alert: true });
             }
 
             const data = ctx.callbackQuery.data;
@@ -70,7 +70,7 @@ export class TelegramService implements OnModuleInit {
                 });
 
                 if (!event || event.deletedAt) {
-                    return ctx.answerCallbackQuery({ text: 'You are not invited to this event', show_alert: true });
+                    return ctx.answerCallbackQuery({ text: 'Событие недоступно', show_alert: true });
                 }
 
                 const participation = await this.prisma.participation.findUnique({
@@ -84,7 +84,7 @@ export class TelegramService implements OnModuleInit {
                 });
 
                 if (!participation) {
-                    return ctx.answerCallbackQuery({ text: 'You are not invited to this event', show_alert: true });
+                    return ctx.answerCallbackQuery({ text: 'Вы не приглашены на это событие', show_alert: true });
                 }
 
                 await this.prisma.participation.update({
@@ -106,7 +106,7 @@ export class TelegramService implements OnModuleInit {
                     return ctx.answerCallbackQuery({ text: responseLine, show_alert: false });
                 }
 
-                await ctx.answerCallbackQuery({ text: 'OK', show_alert: false });
+                await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
 
                 const originalText = (ctx.callbackQuery.message as any)?.text as string | undefined;
                 if (!originalText) {
@@ -126,7 +126,7 @@ export class TelegramService implements OnModuleInit {
                 }
             } catch (error) {
                 this.logger.error('Ошибка при обработке callback участия', error as any);
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
             }
         });
 
@@ -217,7 +217,7 @@ export class TelegramService implements OnModuleInit {
                 keyboard.text(label, `att:sel:${shortEventId}`).row();
             }
 
-            return ctx.reply('Select event:', {
+            return ctx.reply('Выберите событие:', {
                 reply_markup: keyboard,
             });
         });
@@ -519,10 +519,10 @@ export class TelegramService implements OnModuleInit {
         if (parsedSelect) {
             const eventId = this.decodeShortToUuid(parsedSelect[1]);
             if (!eventId) {
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
             }
 
-            await ctx.answerCallbackQuery({ text: 'OK', show_alert: false });
+            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
             return this.showAttendancePanel({ ctx, eventId });
         }
 
@@ -537,7 +537,7 @@ export class TelegramService implements OnModuleInit {
         const statusCode = parsedMark[3];
 
         if (!eventId || !targetUserId) {
-            return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+            return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
         }
 
         const status = statusCode === 'p' ? 'present' : statusCode === 'l' ? 'late' : 'absent';
@@ -549,7 +549,7 @@ export class TelegramService implements OnModuleInit {
             });
 
             if (!event || event.deletedAt) {
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Событие недоступно', show_alert: true });
             }
 
             const membership = await this.prisma.workspaceMember.findUnique({
@@ -563,7 +563,7 @@ export class TelegramService implements OnModuleInit {
             });
 
             if (!membership || membership.role !== 'OWNER') {
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Недостаточно прав', show_alert: true });
             }
 
             const startsAt = this.combineDateTime(event.date, event.timeStart);
@@ -590,12 +590,12 @@ export class TelegramService implements OnModuleInit {
             });
 
             this.logger.log(`[Attendance] ${status} for user ${targetUserId} at event ${eventId}`);
-            await ctx.answerCallbackQuery({ text: 'OK', show_alert: false });
+            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
 
             return this.showAttendancePanel({ ctx, eventId });
         } catch (error) {
             this.logger.error('Ошибка при обработке attendance callback', error as any);
-            return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+            return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
         }
     }
 
@@ -650,7 +650,7 @@ export class TelegramService implements OnModuleInit {
         }
 
         const date = event.date.toLocaleDateString('ru-RU');
-        let text = `Attendance\n\nEvent: ${event.title}\nDate: ${date}\nTime: ${event.timeStart}\n\n`;
+        let text = `Посещаемость\n\nСобытие: ${event.title}\nДата: ${date}\nВремя начала: ${event.timeStart}\n\n`;
 
         if (participations.length === 0) {
             text += 'Нет участников со статусом accepted/tentative.';
@@ -658,8 +658,14 @@ export class TelegramService implements OnModuleInit {
             for (const p of participations) {
                 const name = p.user?.name || p.user?.telegramId || p.userId;
                 const st = statusByUserId.get(p.userId);
-                const icon = st === 'present' ? '✅' : st === 'late' ? '⏰' : st === 'absent' ? '❌' : '⏳';
-                text += `${name} — ${icon}\n`;
+                const statusText = st === 'present'
+                    ? 'присутствует'
+                    : st === 'late'
+                        ? 'опоздал'
+                        : st === 'absent'
+                            ? 'отсутствует'
+                            : 'не отмечен';
+                text += `${name} — ${statusText}\n`;
             }
         }
 
@@ -668,9 +674,9 @@ export class TelegramService implements OnModuleInit {
             const shortEventId = this.encodeUuidToShort(event.id);
             const shortUserId = this.encodeUuidToShort(p.userId);
             keyboard
-                .text('✅ Present', `att:mk:${shortEventId}:${shortUserId}:p`)
-                .text('⏰ Late', `att:mk:${shortEventId}:${shortUserId}:l`)
-                .text('❌ Absent', `att:mk:${shortEventId}:${shortUserId}:a`)
+                .text('Отметить: присутствует', `att:mk:${shortEventId}:${shortUserId}:p`)
+                .text('Отметить: опоздал', `att:mk:${shortEventId}:${shortUserId}:l`)
+                .text('Отметить: отсутствует', `att:mk:${shortEventId}:${shortUserId}:a`)
                 .row();
         }
 
@@ -708,16 +714,16 @@ export class TelegramService implements OnModuleInit {
 
     private buildParticipationKeyboard(eventId: string): InlineKeyboard {
         return new InlineKeyboard()
-            .text('✅ Will attend', `event:${eventId}:response:accepted`)
-            .text('❌ Will not attend', `event:${eventId}:response:declined`)
+            .text('Буду участвовать', `event:${eventId}:response:accepted`)
+            .text('Не буду участвовать', `event:${eventId}:response:declined`)
             .row()
-            .text('❓ Not sure', `event:${eventId}:response:tentative`);
+            .text('Пока не уверен', `event:${eventId}:response:tentative`);
     }
 
     private getResponseLine(status: 'accepted' | 'declined' | 'tentative'): string {
-        if (status === 'accepted') return 'Your response: ✅ Will attend';
-        if (status === 'declined') return 'Your response: ❌ Will not attend';
-        return 'Your response: ❓ Not sure';
+        if (status === 'accepted') return 'Ваш ответ: буду участвовать';
+        if (status === 'declined') return 'Ваш ответ: не буду участвовать';
+        return 'Ваш ответ: пока не уверен';
     }
 
     getBot(): Bot {

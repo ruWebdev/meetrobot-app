@@ -99,16 +99,15 @@ let EventRemindersProcessor = EventRemindersProcessor_1 = class EventRemindersPr
     }
     buildReminderText(params) {
         if (params.isSubEvent) {
-            return (`⏰ Reminder\n\n` +
-                `Rehearsal reminder\n\n` +
-                `Event: ${params.title}\n` +
-                `Starts at: ${params.timeStart}\n` +
-                `Location: ${params.location}`);
+            return (`Напоминание\n\n` +
+                `Под-событие: ${params.title}\n` +
+                `Начало: ${params.timeStart}\n` +
+                `Место: ${params.location}`);
         }
-        return (`⏰ Reminder\n\n` +
-            `Event: ${params.title}\n` +
-            `Starts at: ${params.timeStart}\n` +
-            `Location: ${params.location}`);
+        return (`Напоминание\n\n` +
+            `Событие: ${params.title}\n` +
+            `Начало: ${params.timeStart}\n` +
+            `Место: ${params.location}`);
     }
 };
 exports.EventRemindersProcessor = EventRemindersProcessor;

@@ -337,7 +337,7 @@ export default function EditEventPage(props: { workspaceId: string; eventId: str
                 </div>
 
                 <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">
-                    Workspace: {workspaceId}
+                    Рабочее пространство: {workspaceId}
                 </div>
             </div>
         </div>

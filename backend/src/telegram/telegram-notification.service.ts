@@ -128,7 +128,7 @@ export class TelegramNotificationService {
             return;
         }
 
-        const text = `❌ Event Cancelled\n\nEvent "${event.title}" has been cancelled.`;
+        const text = `Событие отменено\n\nСобытие "${event.title}" было отменено.`;
         const bot = this.telegramService.getBot();
 
         const tgGroup = await this.prisma.telegramGroup.findFirst({
@@ -228,10 +228,10 @@ export class TelegramNotificationService {
 
     private buildParticipationKeyboard(eventId: string): InlineKeyboard {
         return new InlineKeyboard()
-            .text('✅ Will attend', `event:${eventId}:response:accepted`)
-            .text('❌ Will not attend', `event:${eventId}:response:declined`)
+            .text('Буду участвовать', `event:${eventId}:response:accepted`)
+            .text('Не буду участвовать', `event:${eventId}:response:declined`)
             .row()
-            .text('❓ Not sure', `event:${eventId}:response:tentative`);
+            .text('Пока не уверен', `event:${eventId}:response:tentative`);
     }
 
     private buildEventCardText(params: {
@@ -248,21 +248,21 @@ export class TelegramNotificationService {
         const date = params.masterEvent.date.toLocaleDateString('ru-RU');
 
         let text =
-            `🎵 New Event Scheduled\n\n` +
-            `Title: ${params.masterEvent.title}\n` +
-            `Date: ${date}\n` +
-            `Time: ${params.masterEvent.timeStart}–${params.masterEvent.timeEnd}\n` +
-            `Location: ${params.masterEvent.location}`;
+            `Новое событие\n\n` +
+            `Название: ${params.masterEvent.title}\n` +
+            `Дата: ${date}\n` +
+            `Время: ${params.masterEvent.timeStart}–${params.masterEvent.timeEnd}\n` +
+            `Место: ${params.masterEvent.location}`;
 
         if (params.masterEvent.description) {
             text += `\n\n${params.masterEvent.description}`;
         }
 
         if (params.subEvents.length) {
-            text += `\n\nRehearsals:`;
+            text += `\n\nПод-события:`;
             for (const se of params.subEvents) {
                 const seDate = se.date.toLocaleDateString('ru-RU');
-                text += `\n• ${se.title} — ${seDate}, ${se.timeStart}–${se.timeEnd}`;
+                text += `\n- ${se.title}: ${seDate}, ${se.timeStart}–${se.timeEnd}`;
             }
         }
 
@@ -272,13 +272,13 @@ export class TelegramNotificationService {
     private buildEventUpdatedText(params: { title: string; date: Date; timeStart: string; timeEnd: string; location: string }): string {
         const date = params.date.toLocaleDateString('ru-RU');
         return (
-            `⚠️ Event Updated\n\n` +
-            `Event: ${params.title}\n` +
-            `Date: ${date}\n` +
-            `Time: ${params.timeStart}–${params.timeEnd}\n` +
-            `Location: ${params.location}\n\n` +
-            `Your previous response was reset.\n` +
-            `Please confirm your participation again.`
+            `Событие обновлено\n\n` +
+            `Событие: ${params.title}\n` +
+            `Дата: ${date}\n` +
+            `Время: ${params.timeStart}–${params.timeEnd}\n` +
+            `Место: ${params.location}\n\n` +
+            `Ваш предыдущий ответ сброшен.\n` +
+            `Пожалуйста, подтвердите участие ещё раз.`
         );
     }
 }

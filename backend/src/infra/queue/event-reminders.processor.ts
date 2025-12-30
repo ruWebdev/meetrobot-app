@@ -102,19 +102,18 @@ export class EventRemindersProcessor extends WorkerHost {
     private buildReminderText(params: { title: string; timeStart: string; location: string; isSubEvent: boolean }): string {
         if (params.isSubEvent) {
             return (
-                `⏰ Reminder\n\n` +
-                `Rehearsal reminder\n\n` +
-                `Event: ${params.title}\n` +
-                `Starts at: ${params.timeStart}\n` +
-                `Location: ${params.location}`
+                `Напоминание\n\n` +
+                `Под-событие: ${params.title}\n` +
+                `Начало: ${params.timeStart}\n` +
+                `Место: ${params.location}`
             );
         }
 
         return (
-            `⏰ Reminder\n\n` +
-            `Event: ${params.title}\n` +
-            `Starts at: ${params.timeStart}\n` +
-            `Location: ${params.location}`
+            `Напоминание\n\n` +
+            `Событие: ${params.title}\n` +
+            `Начало: ${params.timeStart}\n` +
+            `Место: ${params.location}`
         );
     }
 }

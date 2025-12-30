@@ -49,11 +49,11 @@ let TelegramService = TelegramService_1 = class TelegramService {
         bot.on('callback_query:data', async (ctx) => {
             const telegramId = ctx.from?.id?.toString();
             if (!telegramId) {
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
             }
             const user = await this.userService.findByTelegramId(telegramId);
             if (!user) {
-                return ctx.answerCallbackQuery({ text: 'User not registered', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Пользователь не зарегистрирован', show_alert: true });
             }
             const data = ctx.callbackQuery.data;
             if (data.startsWith('att:')) {
@@ -73,7 +73,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     select: { id: true, deletedAt: true },
                 });
                 if (!event || event.deletedAt) {
-                    return ctx.answerCallbackQuery({ text: 'You are not invited to this event', show_alert: true });
+                    return ctx.answerCallbackQuery({ text: 'Событие недоступно', show_alert: true });
                 }
                 const participation = await this.prisma.participation.findUnique({
                     where: {
@@ -85,7 +85,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     select: { id: true },
                 });
                 if (!participation) {
-                    return ctx.answerCallbackQuery({ text: 'You are not invited to this event', show_alert: true });
+                    return ctx.answerCallbackQuery({ text: 'Вы не приглашены на это событие', show_alert: true });
                 }
                 await this.prisma.participation.update({
                     where: { id: participation.id },
@@ -103,7 +103,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 if (chatType !== 'private') {
                     return ctx.answerCallbackQuery({ text: responseLine, show_alert: false });
                 }
-                await ctx.answerCallbackQuery({ text: 'OK', show_alert: false });
+                await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
                 const originalText = ctx.callbackQuery.message?.text;
                 if (!originalText) {
                     return;
@@ -122,7 +122,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
             catch (error) {
                 this.logger.error('Ошибка при обработке callback участия', error);
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
             }
         });
         bot.command('attendance', async (ctx) => {
@@ -198,7 +198,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 const label = e.title.length > 28 ? `${e.title.slice(0, 28)}…` : e.title;
                 keyboard.text(label, `att:sel:${shortEventId}`).row();
             }
-            return ctx.reply('Select event:', {
+            return ctx.reply('Выберите событие:', {
                 reply_markup: keyboard,
             });
         });
@@ -447,9 +447,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
         if (parsedSelect) {
             const eventId = this.decodeShortToUuid(parsedSelect[1]);
             if (!eventId) {
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
             }
-            await ctx.answerCallbackQuery({ text: 'OK', show_alert: false });
+            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
             return this.showAttendancePanel({ ctx, eventId });
         }
         const parsedMark = data.match(/^att:mk:([A-Za-z0-9_-]{22}):([A-Za-z0-9_-]{22}):(p|l|a)$/);
@@ -461,7 +461,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const targetUserId = this.decodeShortToUuid(parsedMark[2]);
         const statusCode = parsedMark[3];
         if (!eventId || !targetUserId) {
-            return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+            return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
         }
         const status = statusCode === 'p' ? 'present' : statusCode === 'l' ? 'late' : 'absent';
         try {
@@ -470,7 +470,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 select: { id: true, workspaceId: true, date: true, timeStart: true, deletedAt: true },
             });
             if (!event || event.deletedAt) {
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Событие недоступно', show_alert: true });
             }
             const membership = await this.prisma.workspaceMember.findUnique({
                 where: {
@@ -482,7 +482,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 select: { role: true },
             });
             if (!membership || membership.role !== 'OWNER') {
-                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+                return ctx.answerCallbackQuery({ text: 'Недостаточно прав', show_alert: true });
             }
             const startsAt = this.combineDateTime(event.date, event.timeStart);
             if (!startsAt || startsAt.getTime() > Date.now()) {
@@ -506,12 +506,12 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 },
             });
             this.logger.log(`[Attendance] ${status} for user ${targetUserId} at event ${eventId}`);
-            await ctx.answerCallbackQuery({ text: 'OK', show_alert: false });
+            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
             return this.showAttendancePanel({ ctx, eventId });
         }
         catch (error) {
             this.logger.error('Ошибка при обработке attendance callback', error);
-            return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+            return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
         }
     }
     async showAttendancePanel(params) {
@@ -558,7 +558,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             statusByUserId.set(a.userId, a.status);
         }
         const date = event.date.toLocaleDateString('ru-RU');
-        let text = `Attendance\n\nEvent: ${event.title}\nDate: ${date}\nTime: ${event.timeStart}\n\n`;
+        let text = `Посещаемость\n\nСобытие: ${event.title}\nДата: ${date}\nВремя начала: ${event.timeStart}\n\n`;
         if (participations.length === 0) {
             text += 'Нет участников со статусом accepted/tentative.';
         }
@@ -566,8 +566,14 @@ let TelegramService = TelegramService_1 = class TelegramService {
             for (const p of participations) {
                 const name = p.user?.name || p.user?.telegramId || p.userId;
                 const st = statusByUserId.get(p.userId);
-                const icon = st === 'present' ? '✅' : st === 'late' ? '⏰' : st === 'absent' ? '❌' : '⏳';
-                text += `${name} — ${icon}\n`;
+                const statusText = st === 'present'
+                    ? 'присутствует'
+                    : st === 'late'
+                        ? 'опоздал'
+                        : st === 'absent'
+                            ? 'отсутствует'
+                            : 'не отмечен';
+                text += `${name} — ${statusText}\n`;
             }
         }
         const keyboard = new grammy_1.InlineKeyboard();
@@ -575,9 +581,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
             const shortEventId = this.encodeUuidToShort(event.id);
             const shortUserId = this.encodeUuidToShort(p.userId);
             keyboard
-                .text('✅ Present', `att:mk:${shortEventId}:${shortUserId}:p`)
-                .text('⏰ Late', `att:mk:${shortEventId}:${shortUserId}:l`)
-                .text('❌ Absent', `att:mk:${shortEventId}:${shortUserId}:a`)
+                .text('Отметить: присутствует', `att:mk:${shortEventId}:${shortUserId}:p`)
+                .text('Отметить: опоздал', `att:mk:${shortEventId}:${shortUserId}:l`)
+                .text('Отметить: отсутствует', `att:mk:${shortEventId}:${shortUserId}:a`)
                 .row();
         }
         try {
@@ -614,17 +620,17 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     buildParticipationKeyboard(eventId) {
         return new grammy_1.InlineKeyboard()
-            .text('✅ Will attend', `event:${eventId}:response:accepted`)
-            .text('❌ Will not attend', `event:${eventId}:response:declined`)
+            .text('Буду участвовать', `event:${eventId}:response:accepted`)
+            .text('Не буду участвовать', `event:${eventId}:response:declined`)
             .row()
-            .text('❓ Not sure', `event:${eventId}:response:tentative`);
+            .text('Пока не уверен', `event:${eventId}:response:tentative`);
     }
     getResponseLine(status) {
         if (status === 'accepted')
-            return 'Your response: ✅ Will attend';
+            return 'Ваш ответ: буду участвовать';
         if (status === 'declined')
-            return 'Your response: ❌ Will not attend';
-        return 'Your response: ❓ Not sure';
+            return 'Ваш ответ: не буду участвовать';
+        return 'Ваш ответ: пока не уверен';
     }
     getBot() {
         if (!this.bot) {
