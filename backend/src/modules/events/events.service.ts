@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { EventReminderScheduler } from '../../infra/queue/event-reminder.scheduler';
 import { TelegramNotificationService } from '../../telegram/telegram-notification.service';
 import { CreateEventDto } from './dto/create-event.dto';
 
@@ -11,6 +12,7 @@ export class EventsService {
     constructor(
         private prisma: PrismaService,
         private telegramNotificationService: TelegramNotificationService,
+        private eventReminderScheduler: EventReminderScheduler,
     ) { }
 
     async createEvent(params: { userId: string; dto: CreateEventDto }) {
@@ -112,6 +114,24 @@ export class EventsService {
             await this.telegramNotificationService.sendEventCreated(created.masterEvent.id);
         } catch (error) {
             this.logger.warn(`[Telegram] Failed to send event card ${created.masterEvent.id}`, error as any);
+        }
+
+        try {
+            await this.eventReminderScheduler.scheduleReminderForEvent({
+                eventId: created.masterEvent.id,
+                date: created.masterEvent.date,
+                timeStart: created.masterEvent.timeStart,
+            });
+
+            await Promise.all(
+                created.subEvents.map((se) => this.eventReminderScheduler.scheduleReminderForEvent({
+                    eventId: se.id,
+                    date: se.date,
+                    timeStart: se.timeStart,
+                })),
+            );
+        } catch (error) {
+            this.logger.warn(`[Reminder] Failed to schedule reminders for master event ${created.masterEvent.id}`, error as any);
         }
 
         return {

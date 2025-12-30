@@ -4,9 +4,10 @@ import { EventsService } from './events.service';
 import { WorkspaceModule } from '../workspace/workspace.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { TelegramNotificationService } from '../../telegram/telegram-notification.service';
+import { QueueModule } from '../../infra/queue/queue.module';
 
 @Module({
-    imports: [WorkspaceModule, TelegramModule],
+    imports: [WorkspaceModule, TelegramModule, QueueModule],
     controllers: [EventsController],
     providers: [EventsService, TelegramNotificationService],
     exports: [EventsService],

@@ -13,14 +13,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infra/prisma/prisma.service");
+const event_reminder_scheduler_1 = require("../../infra/queue/event-reminder.scheduler");
 const telegram_notification_service_1 = require("../../telegram/telegram-notification.service");
 let EventsService = EventsService_1 = class EventsService {
     prisma;
     telegramNotificationService;
+    eventReminderScheduler;
     logger = new common_1.Logger(EventsService_1.name);
-    constructor(prisma, telegramNotificationService) {
+    constructor(prisma, telegramNotificationService, eventReminderScheduler) {
         this.prisma = prisma;
         this.telegramNotificationService = telegramNotificationService;
+        this.eventReminderScheduler = eventReminderScheduler;
     }
     async createEvent(params) {
         const { userId, dto } = params;
@@ -105,6 +108,21 @@ let EventsService = EventsService_1 = class EventsService {
         catch (error) {
             this.logger.warn(`[Telegram] Failed to send event card ${created.masterEvent.id}`, error);
         }
+        try {
+            await this.eventReminderScheduler.scheduleReminderForEvent({
+                eventId: created.masterEvent.id,
+                date: created.masterEvent.date,
+                timeStart: created.masterEvent.timeStart,
+            });
+            await Promise.all(created.subEvents.map((se) => this.eventReminderScheduler.scheduleReminderForEvent({
+                eventId: se.id,
+                date: se.date,
+                timeStart: se.timeStart,
+            })));
+        }
+        catch (error) {
+            this.logger.warn(`[Reminder] Failed to schedule reminders for master event ${created.masterEvent.id}`, error);
+        }
         return {
             masterEvent: created.masterEvent,
             subEvents: created.subEvents,
@@ -115,5 +133,6 @@ exports.EventsService = EventsService;
 exports.EventsService = EventsService = EventsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        telegram_notification_service_1.TelegramNotificationService])
+        telegram_notification_service_1.TelegramNotificationService,
+        event_reminder_scheduler_1.EventReminderScheduler])
 ], EventsService);

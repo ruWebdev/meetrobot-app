@@ -13,12 +13,13 @@ const events_service_1 = require("./events.service");
 const workspace_module_1 = require("../workspace/workspace.module");
 const telegram_module_1 = require("../telegram/telegram.module");
 const telegram_notification_service_1 = require("../../telegram/telegram-notification.service");
+const queue_module_1 = require("../../infra/queue/queue.module");
 let EventsModule = class EventsModule {
 };
 exports.EventsModule = EventsModule;
 exports.EventsModule = EventsModule = __decorate([
     (0, common_1.Module)({
-        imports: [workspace_module_1.WorkspaceModule, telegram_module_1.TelegramModule],
+        imports: [workspace_module_1.WorkspaceModule, telegram_module_1.TelegramModule, queue_module_1.QueueModule],
         controllers: [events_controller_1.EventsController],
         providers: [events_service_1.EventsService, telegram_notification_service_1.TelegramNotificationService],
         exports: [events_service_1.EventsService],
