@@ -114,7 +114,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             const webappBaseUrl = trimmedWebappHost.startsWith('http://') || trimmedWebappHost.startsWith('https://')
                 ? trimmedWebappHost
                 : `https://${trimmedWebappHost}`;
-            const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}`;
+            const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}&apiBaseUrl=${encodeURIComponent(webappBaseUrl)}`;
             const keyboard = new grammy_1.InlineKeyboard().webApp('Создать событие', url);
             // В группах Telegram может отклонять web_app inline-кнопки (BUTTON_TYPE_INVALID).
             // Чтобы не ломать сценарий, в группе отправляем кнопку в личные сообщения.

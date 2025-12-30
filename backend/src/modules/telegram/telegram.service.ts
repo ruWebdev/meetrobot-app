@@ -119,7 +119,7 @@ export class TelegramService implements OnModuleInit {
                     ? trimmedWebappHost
                     : `https://${trimmedWebappHost}`;
 
-            const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}`;
+            const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}&apiBaseUrl=${encodeURIComponent(webappBaseUrl)}`;
             const keyboard = new InlineKeyboard().webApp('Создать событие', url);
 
             // В группах Telegram может отклонять web_app inline-кнопки (BUTTON_TYPE_INVALID).
