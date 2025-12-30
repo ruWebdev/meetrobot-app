@@ -216,6 +216,7 @@ model Booking {
   cancelReason String?
   createdAt   DateTime      @default(now())
 
+  @@unique([timeSlotId, providerId, serviceId])
   @@index([clientId])
   @@index([providerId])
   @@index([serviceId])
