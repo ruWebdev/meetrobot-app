@@ -120,13 +120,18 @@ export class TelegramService implements OnModuleInit {
                     : `https://${trimmedWebappHost}`;
 
             const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}`;
-            const keyboard = new InlineKeyboard().webApp('Create Event', url);
+            const keyboard = new InlineKeyboard().webApp('Создать событие', url);
 
             // В группах Telegram может отклонять web_app inline-кнопки (BUTTON_TYPE_INVALID).
             // Чтобы не ломать сценарий, в группе отправляем кнопку в личные сообщения.
             if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
+                const fromId = ctx.from?.id;
+                if (!fromId) {
+                    return ctx.reply('Не удалось определить пользователя. Попробуйте позже.');
+                }
+
                 try {
-                    await bot.api.sendMessage(ctx.from.id, 'Откройте форму создания события:', {
+                    await bot.api.sendMessage(fromId, 'Откройте форму создания события:', {
                         reply_markup: keyboard,
                     });
                     this.logger.log(`[Telegram] Open WebApp for user ${user.id}, workspace ${workspaceId}`);
