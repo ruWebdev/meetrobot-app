@@ -56,6 +56,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 return ctx.answerCallbackQuery({ text: 'User not registered', show_alert: true });
             }
             const data = ctx.callbackQuery.data;
+            if (data.startsWith('att:')) {
+                return this.handleAttendanceCallback({ ctx, userId: user.id, data });
+            }
             const parsed = this.parseParticipationCallbackData(data);
             if (!parsed) {
                 if (data.startsWith('event:') && data.includes(':response:')) {
@@ -73,6 +76,82 @@ let TelegramService = TelegramService_1 = class TelegramService {
                         },
                     },
                     select: { id: true },
+                });
+                bot.command('attendance', async (ctx) => {
+                    if (ctx.chat.type === 'private') {
+                        return ctx.reply('Эта команда доступна только в группе.');
+                    }
+                    if (ctx.chat.type === 'channel') {
+                        return;
+                    }
+                    if (ctx.chat.type !== 'group' && ctx.chat.type !== 'supergroup') {
+                        return ctx.reply('Эта команда доступна только в группе.');
+                    }
+                    const telegramId = ctx.from?.id?.toString();
+                    if (!telegramId) {
+                        return ctx.reply('Не удалось определить пользователя. Попробуйте позже.');
+                    }
+                    const user = await this.userService.findByTelegramId(telegramId);
+                    if (!user) {
+                        return ctx.reply('Пользователь не зарегистрирован');
+                    }
+                    const telegramChatId = ctx.chat.id.toString();
+                    const tgGroup = await this.prisma.telegramGroup.findUnique({
+                        where: { telegramChatId },
+                        select: { workspaceId: true },
+                    });
+                    const workspaceId = tgGroup?.workspaceId;
+                    if (!workspaceId) {
+                        return ctx.reply('Эта группа не подключена ни к одному рабочему пространству.');
+                    }
+                    const membership = await this.prisma.workspaceMember.findUnique({
+                        where: {
+                            userId_workspaceId: {
+                                userId: user.id,
+                                workspaceId,
+                            },
+                        },
+                        select: { role: true },
+                    });
+                    if (!membership || membership.role !== 'OWNER') {
+                        return ctx.reply('Только владелец рабочего пространства может отмечать посещаемость.');
+                    }
+                    const activeEvents = await this.prisma.event.findMany({
+                        where: {
+                            workspaceId,
+                            type: 'master',
+                            status: 'scheduled',
+                        },
+                        select: {
+                            id: true,
+                            title: true,
+                            date: true,
+                            timeStart: true,
+                            timeEnd: true,
+                        },
+                        orderBy: [{ date: 'desc' }, { timeStart: 'desc' }],
+                        take: 5,
+                    });
+                    const now = new Date();
+                    const candidates = activeEvents.filter((e) => {
+                        const start = this.combineDateTime(e.date, e.timeStart);
+                        return start && start.getTime() <= now.getTime();
+                    });
+                    if (candidates.length === 0) {
+                        return ctx.reply('Нет доступных событий для отметки. Отметка доступна только после начала события.');
+                    }
+                    if (candidates.length === 1) {
+                        return this.showAttendancePanel({ ctx, eventId: candidates[0].id });
+                    }
+                    const keyboard = new grammy_1.InlineKeyboard();
+                    for (const e of candidates) {
+                        const shortEventId = this.encodeUuidToShort(e.id);
+                        const label = e.title.length > 28 ? `${e.title.slice(0, 28)}…` : e.title;
+                        keyboard.text(label, `att:sel:${shortEventId}`).row();
+                    }
+                    return ctx.reply('Select event:', {
+                        reply_markup: keyboard,
+                    });
                 });
                 if (!participation) {
                     return ctx.answerCallbackQuery({ text: 'You are not invited to this event', show_alert: true });
@@ -114,6 +193,82 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 this.logger.error('Ошибка при обработке callback участия', error);
                 return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
             }
+        });
+        bot.command('attendance', async (ctx) => {
+            if (ctx.chat.type === 'private') {
+                return ctx.reply('Эта команда доступна только в группе.');
+            }
+            if (ctx.chat.type === 'channel') {
+                return;
+            }
+            if (ctx.chat.type !== 'group' && ctx.chat.type !== 'supergroup') {
+                return ctx.reply('Эта команда доступна только в группе.');
+            }
+            const telegramId = ctx.from?.id?.toString();
+            if (!telegramId) {
+                return ctx.reply('Не удалось определить пользователя. Попробуйте позже.');
+            }
+            const user = await this.userService.findByTelegramId(telegramId);
+            if (!user) {
+                return ctx.reply('Пользователь не зарегистрирован');
+            }
+            const telegramChatId = ctx.chat.id.toString();
+            const tgGroup = await this.prisma.telegramGroup.findUnique({
+                where: { telegramChatId },
+                select: { workspaceId: true },
+            });
+            const workspaceId = tgGroup?.workspaceId;
+            if (!workspaceId) {
+                return ctx.reply('Эта группа не подключена ни к одному рабочему пространству.');
+            }
+            const membership = await this.prisma.workspaceMember.findUnique({
+                where: {
+                    userId_workspaceId: {
+                        userId: user.id,
+                        workspaceId,
+                    },
+                },
+                select: { role: true },
+            });
+            if (!membership || membership.role !== 'OWNER') {
+                return ctx.reply('Только владелец рабочего пространства может отмечать посещаемость.');
+            }
+            const activeEvents = await this.prisma.event.findMany({
+                where: {
+                    workspaceId,
+                    type: 'master',
+                    status: 'scheduled',
+                },
+                select: {
+                    id: true,
+                    title: true,
+                    date: true,
+                    timeStart: true,
+                    timeEnd: true,
+                },
+                orderBy: [{ date: 'desc' }, { timeStart: 'desc' }],
+                take: 5,
+            });
+            const now = new Date();
+            const candidates = activeEvents.filter((e) => {
+                const start = this.combineDateTime(e.date, e.timeStart);
+                return start && start.getTime() <= now.getTime();
+            });
+            if (candidates.length === 0) {
+                return ctx.reply('Нет доступных событий для отметки. Отметка доступна только после начала события.');
+            }
+            if (candidates.length === 1) {
+                return this.showAttendancePanel({ ctx, eventId: candidates[0].id });
+            }
+            const keyboard = new grammy_1.InlineKeyboard();
+            for (const e of candidates) {
+                const shortEventId = this.encodeUuidToShort(e.id);
+                const label = e.title.length > 28 ? `${e.title.slice(0, 28)}…` : e.title;
+                keyboard.text(label, `att:sel:${shortEventId}`).row();
+            }
+            return ctx.reply('Select event:', {
+                reply_markup: keyboard,
+            });
         });
         bot.command('create_event', async (ctx) => {
             const telegramId = ctx.from?.id?.toString();
@@ -353,6 +508,176 @@ let TelegramService = TelegramService_1 = class TelegramService {
         if (!match)
             return null;
         return { eventId: match[1], status: match[2] };
+    }
+    async handleAttendanceCallback(params) {
+        const { ctx, userId, data } = params;
+        const parsedSelect = data.match(/^att:sel:([A-Za-z0-9_-]{22})$/);
+        if (parsedSelect) {
+            const eventId = this.decodeShortToUuid(parsedSelect[1]);
+            if (!eventId) {
+                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+            }
+            await ctx.answerCallbackQuery({ text: 'OK', show_alert: false });
+            return this.showAttendancePanel({ ctx, eventId });
+        }
+        const parsedMark = data.match(/^att:mk:([A-Za-z0-9_-]{22}):([A-Za-z0-9_-]{22}):(p|l|a)$/);
+        if (!parsedMark) {
+            this.logger.warn(`[Telegram] Invalid attendance callback payload: ${data}`);
+            return;
+        }
+        const eventId = this.decodeShortToUuid(parsedMark[1]);
+        const targetUserId = this.decodeShortToUuid(parsedMark[2]);
+        const statusCode = parsedMark[3];
+        if (!eventId || !targetUserId) {
+            return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+        }
+        const status = statusCode === 'p' ? 'present' : statusCode === 'l' ? 'late' : 'absent';
+        try {
+            const event = await this.prisma.event.findUnique({
+                where: { id: eventId },
+                select: { id: true, workspaceId: true, date: true, timeStart: true },
+            });
+            if (!event) {
+                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+            }
+            const membership = await this.prisma.workspaceMember.findUnique({
+                where: {
+                    userId_workspaceId: {
+                        userId,
+                        workspaceId: event.workspaceId,
+                    },
+                },
+                select: { role: true },
+            });
+            if (!membership || membership.role !== 'OWNER') {
+                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+            }
+            const startsAt = this.combineDateTime(event.date, event.timeStart);
+            if (!startsAt || startsAt.getTime() > Date.now()) {
+                return ctx.answerCallbackQuery({ text: 'Отметка доступна после начала события.', show_alert: true });
+            }
+            await this.prisma.attendance.upsert({
+                where: {
+                    eventId_userId: {
+                        eventId,
+                        userId: targetUserId,
+                    },
+                },
+                create: {
+                    eventId,
+                    userId: targetUserId,
+                    status,
+                },
+                update: {
+                    status,
+                    markedAt: new Date(),
+                },
+            });
+            this.logger.log(`[Attendance] ${status} for user ${targetUserId} at event ${eventId}`);
+            await ctx.answerCallbackQuery({ text: 'OK', show_alert: false });
+            return this.showAttendancePanel({ ctx, eventId });
+        }
+        catch (error) {
+            this.logger.error('Ошибка при обработке attendance callback', error);
+            return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+        }
+    }
+    async showAttendancePanel(params) {
+        const { ctx, eventId } = params;
+        const event = await this.prisma.event.findUnique({
+            where: { id: eventId },
+            select: {
+                id: true,
+                title: true,
+                workspaceId: true,
+                date: true,
+                timeStart: true,
+            },
+        });
+        if (!event) {
+            return ctx.reply('Событие не найдено.');
+        }
+        const startsAt = this.combineDateTime(event.date, event.timeStart);
+        if (!startsAt || startsAt.getTime() > Date.now()) {
+            return ctx.reply('Отметка доступна только после начала события.');
+        }
+        const participations = await this.prisma.participation.findMany({
+            where: {
+                eventId: event.id,
+                responseStatus: { in: ['accepted', 'tentative'] },
+            },
+            select: {
+                userId: true,
+                user: { select: { name: true, telegramId: true } },
+            },
+            orderBy: { userId: 'asc' },
+        });
+        const userIds = participations.map((p) => p.userId);
+        const attendances = await this.prisma.attendance.findMany({
+            where: {
+                eventId: event.id,
+                userId: { in: userIds },
+            },
+            select: { userId: true, status: true },
+        });
+        const statusByUserId = new Map();
+        for (const a of attendances) {
+            statusByUserId.set(a.userId, a.status);
+        }
+        const date = event.date.toLocaleDateString('ru-RU');
+        let text = `Attendance\n\nEvent: ${event.title}\nDate: ${date}\nTime: ${event.timeStart}\n\n`;
+        if (participations.length === 0) {
+            text += 'Нет участников со статусом accepted/tentative.';
+        }
+        else {
+            for (const p of participations) {
+                const name = p.user?.name || p.user?.telegramId || p.userId;
+                const st = statusByUserId.get(p.userId);
+                const icon = st === 'present' ? '✅' : st === 'late' ? '⏰' : st === 'absent' ? '❌' : '⏳';
+                text += `${name} — ${icon}\n`;
+            }
+        }
+        const keyboard = new grammy_1.InlineKeyboard();
+        for (const p of participations) {
+            const shortEventId = this.encodeUuidToShort(event.id);
+            const shortUserId = this.encodeUuidToShort(p.userId);
+            keyboard
+                .text('✅ Present', `att:mk:${shortEventId}:${shortUserId}:p`)
+                .text('⏰ Late', `att:mk:${shortEventId}:${shortUserId}:l`)
+                .text('❌ Absent', `att:mk:${shortEventId}:${shortUserId}:a`)
+                .row();
+        }
+        try {
+            return await ctx.editMessageText(text, { reply_markup: keyboard });
+        }
+        catch {
+            return ctx.reply(text, { reply_markup: keyboard });
+        }
+    }
+    combineDateTime(date, time) {
+        const match = time.match(/^(\d{1,2}):(\d{2})$/);
+        if (!match)
+            return null;
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+        if (Number.isNaN(hours) || Number.isNaN(minutes))
+            return null;
+        const d = new Date(date);
+        d.setHours(hours, minutes, 0, 0);
+        return d;
+    }
+    encodeUuidToShort(uuid) {
+        const hex = uuid.replace(/-/g, '');
+        const buf = Buffer.from(hex, 'hex');
+        return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    }
+    decodeShortToUuid(short) {
+        const padded = short.replace(/-/g, '+').replace(/_/g, '/').padEnd(24, '=');
+        const buf = Buffer.from(padded, 'base64');
+        if (buf.length !== 16)
+            return null;
+        const hex = buf.toString('hex');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
     }
     buildParticipationKeyboard(eventId) {
         return new grammy_1.InlineKeyboard()

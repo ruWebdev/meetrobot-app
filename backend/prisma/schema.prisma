@@ -17,6 +17,12 @@ enum ParticipationStatus {
   tentative
 }
 
+enum AttendanceStatus {
+  present
+  late
+  absent
+}
+
 model User {
   id          String   @id @default(uuid())
   telegramId  String   @unique
@@ -26,6 +32,7 @@ model User {
   workspaces  Workspace[]
   participations Participation[]
   createdEvents Event[] @relation("EventCreatedBy")
+  attendances Attendance[]
 }
 
 model Workspace {
@@ -84,6 +91,7 @@ model Event {
   createdAt     DateTime @default(now())
 
   participations Participation[]
+  attendances Attendance[]
 
   @@index([workspaceId])
   @@index([parentEventId])
@@ -102,4 +110,17 @@ model Participation {
 
   @@unique([userId, eventId])
   @@index([eventId])
+}
+
+model Attendance {
+  id        String           @id @default(uuid())
+  event     Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId   String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  status    AttendanceStatus
+  markedAt  DateTime         @default(now())
+
+  @@unique([eventId, userId])
 }

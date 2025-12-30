@@ -106,6 +106,68 @@ export class TelegramNotificationService {
         );
     }
 
+    async sendEventUpdated(eventId: string): Promise<void> {
+        const event = await this.prisma.event.findUnique({
+            where: { id: eventId },
+            select: {
+                id: true,
+                workspaceId: true,
+                title: true,
+                date: true,
+                timeStart: true,
+                timeEnd: true,
+                location: true,
+            },
+        });
+
+        if (!event) {
+            this.logger.warn(`[Telegram] Event not found for update notification: ${eventId}`);
+            return;
+        }
+
+        const text = this.buildEventUpdatedText({
+            title: event.title,
+            date: event.date,
+            timeStart: event.timeStart,
+            timeEnd: event.timeEnd,
+            location: event.location,
+        });
+
+        const bot = this.telegramService.getBot();
+
+        const tgGroup = await this.prisma.telegramGroup.findFirst({
+            where: { workspaceId: event.workspaceId },
+            select: { telegramChatId: true, type: true },
+        });
+
+        if (tgGroup?.telegramChatId && (tgGroup.type === 'group' || tgGroup.type === 'supergroup')) {
+            try {
+                await bot.api.sendMessage(tgGroup.telegramChatId, text);
+            } catch (error) {
+                this.logger.warn(`[Telegram] Failed to deliver event updated notification to group ${tgGroup.telegramChatId}: ${eventId}`, error as any);
+            }
+            return;
+        }
+
+        const participations = await this.prisma.participation.findMany({
+            where: { eventId: event.id },
+            select: { user: { select: { telegramId: true } } },
+        });
+
+        await Promise.all(
+            participations.map(async (p) => {
+                const telegramId = p.user?.telegramId;
+                if (!telegramId) return;
+
+                try {
+                    await bot.api.sendMessage(telegramId, text);
+                } catch (error) {
+                    this.logger.warn(`[Telegram] Failed to deliver event updated notification to user ${telegramId}: ${eventId}`, error as any);
+                }
+            }),
+        );
+    }
+
     private buildParticipationKeyboard(eventId: string): InlineKeyboard {
         return new InlineKeyboard()
             .text('✅ Will attend', `event:${eventId}:response:accepted`)
@@ -147,5 +209,18 @@ export class TelegramNotificationService {
         }
 
         return text;
+    }
+
+    private buildEventUpdatedText(params: { title: string; date: Date; timeStart: string; timeEnd: string; location: string }): string {
+        const date = params.date.toLocaleDateString('ru-RU');
+        return (
+            `⚠️ Event Updated\n\n` +
+            `Event: ${params.title}\n` +
+            `Date: ${date}\n` +
+            `Time: ${params.timeStart}–${params.timeEnd}\n` +
+            `Location: ${params.location}\n\n` +
+            `Your previous response was reset.\n` +
+            `Please confirm your participation again.`
+        );
     }
 }
