@@ -30,11 +30,17 @@ export class EventRemindersProcessor extends WorkerHost {
                     title: true,
                     timeStart: true,
                     location: true,
+                    deletedAt: true,
                 },
             });
 
             if (!event) {
                 this.logger.warn(`[Reminder] Event not found: ${eventId}`);
+                return;
+            }
+
+            if (event.deletedAt) {
+                this.logger.log(`[Reminder] Skip deleted event ${eventId}`);
                 return;
             }
 

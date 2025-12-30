@@ -3,6 +3,7 @@ import WebApp from '@twa-dev/sdk';
 
 import CreateEventPage from './pages/CreateEventPage';
 import EventDetailsPage from './pages/EventDetailsPage';
+import EditEventPage from './pages/EditEventPage';
 
 function matchCreateEventRoute(pathname: string): { workspaceId: string } | null {
     const match = pathname.match(/^\/workspaces\/([^/]+)\/events\/create\/?$/);
@@ -12,6 +13,12 @@ function matchCreateEventRoute(pathname: string): { workspaceId: string } | null
 
 function matchEventDetailsRoute(pathname: string): { workspaceId: string; eventId: string } | null {
     const match = pathname.match(/^\/workspaces\/([^/]+)\/events\/([^/]+)\/?$/);
+    if (!match) return null;
+    return { workspaceId: match[1], eventId: match[2] };
+}
+
+function matchEditEventRoute(pathname: string): { workspaceId: string; eventId: string } | null {
+    const match = pathname.match(/^\/workspaces\/([^/]+)\/events\/([^/]+)\/edit\/?$/);
     if (!match) return null;
     return { workspaceId: match[1], eventId: match[2] };
 }
@@ -33,6 +40,11 @@ function App() {
     const createRoute = matchCreateEventRoute(pathname);
     if (createRoute) {
         return <CreateEventPage workspaceId={createRoute.workspaceId} />;
+    }
+
+    const editRoute = matchEditEventRoute(pathname);
+    if (editRoute) {
+        return <EditEventPage workspaceId={editRoute.workspaceId} eventId={editRoute.eventId} />;
     }
 
     const detailsRoute = matchEventDetailsRoute(pathname);

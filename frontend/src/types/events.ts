@@ -37,3 +37,33 @@ export type CreateEventResponse = {
     masterEvent: CreatedEvent;
     subEvents: CreatedEvent[];
 };
+
+export type EventForEditResponse = {
+    masterEvent: {
+        id: string;
+        workspaceId: string;
+        title: string;
+        description: string | null;
+        date: string;
+        timeStart: string;
+        timeEnd: string;
+        location: string;
+    };
+    subEvents: Array<{
+        id: string;
+        title: string;
+        date: string;
+        timeStart: string;
+        timeEnd: string;
+        location: string;
+    }>;
+};
+
+export type EditEventDto = {
+    title?: string;
+    description?: string;
+    date?: string;
+    timeStart?: string;
+    timeEnd?: string;
+    location?: string;
+};

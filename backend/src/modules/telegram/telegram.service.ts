@@ -64,6 +64,15 @@ export class TelegramService implements OnModuleInit {
             const { eventId, status } = parsed;
 
             try {
+                const event = await this.prisma.event.findUnique({
+                    where: { id: eventId },
+                    select: { id: true, deletedAt: true },
+                });
+
+                if (!event || event.deletedAt) {
+                    return ctx.answerCallbackQuery({ text: 'You are not invited to this event', show_alert: true });
+                }
+
                 const participation = await this.prisma.participation.findUnique({
                     where: {
                         userId_eventId: {
@@ -72,97 +81,6 @@ export class TelegramService implements OnModuleInit {
                         },
                     },
                     select: { id: true },
-                });
-
-                bot.command('attendance', async (ctx) => {
-                    if (ctx.chat.type === 'private') {
-                        return ctx.reply('Эта команда доступна только в группе.');
-                    }
-
-                    if (ctx.chat.type === 'channel') {
-                        return;
-                    }
-
-                    if (ctx.chat.type !== 'group' && ctx.chat.type !== 'supergroup') {
-                        return ctx.reply('Эта команда доступна только в группе.');
-                    }
-
-                    const telegramId = ctx.from?.id?.toString();
-                    if (!telegramId) {
-                        return ctx.reply('Не удалось определить пользователя. Попробуйте позже.');
-                    }
-
-                    const user = await this.userService.findByTelegramId(telegramId);
-                    if (!user) {
-                        return ctx.reply('Пользователь не зарегистрирован');
-                    }
-
-                    const telegramChatId = ctx.chat.id.toString();
-                    const tgGroup = await this.prisma.telegramGroup.findUnique({
-                        where: { telegramChatId },
-                        select: { workspaceId: true },
-                    });
-
-                    const workspaceId = tgGroup?.workspaceId;
-                    if (!workspaceId) {
-                        return ctx.reply('Эта группа не подключена ни к одному рабочему пространству.');
-                    }
-
-                    const membership = await this.prisma.workspaceMember.findUnique({
-                        where: {
-                            userId_workspaceId: {
-                                userId: user.id,
-                                workspaceId,
-                            },
-                        },
-                        select: { role: true },
-                    });
-
-                    if (!membership || membership.role !== 'OWNER') {
-                        return ctx.reply('Только владелец рабочего пространства может отмечать посещаемость.');
-                    }
-
-                    const activeEvents = await this.prisma.event.findMany({
-                        where: {
-                            workspaceId,
-                            type: 'master',
-                            status: 'scheduled',
-                        },
-                        select: {
-                            id: true,
-                            title: true,
-                            date: true,
-                            timeStart: true,
-                            timeEnd: true,
-                        },
-                        orderBy: [{ date: 'desc' }, { timeStart: 'desc' }],
-                        take: 5,
-                    });
-
-                    const now = new Date();
-                    const candidates = activeEvents.filter((e) => {
-                        const start = this.combineDateTime(e.date, e.timeStart);
-                        return start && start.getTime() <= now.getTime();
-                    });
-
-                    if (candidates.length === 0) {
-                        return ctx.reply('Нет доступных событий для отметки. Отметка доступна только после начала события.');
-                    }
-
-                    if (candidates.length === 1) {
-                        return this.showAttendancePanel({ ctx, eventId: candidates[0].id });
-                    }
-
-                    const keyboard = new InlineKeyboard();
-                    for (const e of candidates) {
-                        const shortEventId = this.encodeUuidToShort(e.id);
-                        const label = e.title.length > 28 ? `${e.title.slice(0, 28)}…` : e.title;
-                        keyboard.text(label, `att:sel:${shortEventId}`).row();
-                    }
-
-                    return ctx.reply('Select event:', {
-                        reply_markup: keyboard,
-                    });
                 });
 
                 if (!participation) {
@@ -265,6 +183,7 @@ export class TelegramService implements OnModuleInit {
                     workspaceId,
                     type: 'master',
                     status: 'scheduled',
+                    deletedAt: null,
                 },
                 select: {
                     id: true,
@@ -626,10 +545,10 @@ export class TelegramService implements OnModuleInit {
         try {
             const event = await this.prisma.event.findUnique({
                 where: { id: eventId },
-                select: { id: true, workspaceId: true, date: true, timeStart: true },
+                select: { id: true, workspaceId: true, date: true, timeStart: true, deletedAt: true },
             });
 
-            if (!event) {
+            if (!event || event.deletedAt) {
                 return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
             }
 
@@ -691,10 +610,11 @@ export class TelegramService implements OnModuleInit {
                 workspaceId: true,
                 date: true,
                 timeStart: true,
+                deletedAt: true,
             },
         });
 
-        if (!event) {
+        if (!event || event.deletedAt) {
             return ctx.reply('Событие не найдено.');
         }
 

@@ -85,6 +85,7 @@ model Event {
   timeEnd       String
   location      String
   status        String   @default("scheduled")
+  deletedAt     DateTime?
 
   createdBy     User     @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   createdById   String

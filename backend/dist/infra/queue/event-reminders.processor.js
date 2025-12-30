@@ -37,10 +37,15 @@ let EventRemindersProcessor = EventRemindersProcessor_1 = class EventRemindersPr
                     title: true,
                     timeStart: true,
                     location: true,
+                    deletedAt: true,
                 },
             });
             if (!event) {
                 this.logger.warn(`[Reminder] Event not found: ${eventId}`);
+                return;
+            }
+            if (event.deletedAt) {
+                this.logger.log(`[Reminder] Skip deleted event ${eventId}`);
                 return;
             }
             const participations = await this.prisma.participation.findMany({

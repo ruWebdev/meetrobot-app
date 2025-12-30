@@ -25,8 +25,8 @@ let TelegramNotificationService = TelegramNotificationService_1 = class Telegram
     }
     async sendEventCreated(eventId) {
         this.logger.log(`[Telegram] Sending event card ${eventId}`);
-        const masterEvent = await this.prisma.event.findUnique({
-            where: { id: eventId },
+        const masterEvent = await this.prisma.event.findFirst({
+            where: { id: eventId, deletedAt: null },
             select: {
                 id: true,
                 workspaceId: true,
@@ -37,6 +37,7 @@ let TelegramNotificationService = TelegramNotificationService_1 = class Telegram
                 timeEnd: true,
                 location: true,
                 type: true,
+                deletedAt: true,
             },
         });
         if (!masterEvent) {
@@ -48,7 +49,7 @@ let TelegramNotificationService = TelegramNotificationService_1 = class Telegram
             return;
         }
         const subEvents = await this.prisma.event.findMany({
-            where: { parentEventId: masterEvent.id },
+            where: { parentEventId: masterEvent.id, deletedAt: null },
             select: {
                 id: true,
                 title: true,
@@ -106,9 +107,58 @@ let TelegramNotificationService = TelegramNotificationService_1 = class Telegram
             }
         }));
     }
-    async sendEventUpdated(eventId) {
+    async sendEventCancelled(eventId) {
         const event = await this.prisma.event.findUnique({
             where: { id: eventId },
+            select: {
+                id: true,
+                workspaceId: true,
+                title: true,
+                type: true,
+            },
+        });
+        if (!event) {
+            this.logger.warn(`[Telegram] Event not found for cancel notification: ${eventId}`);
+            return;
+        }
+        if (event.type !== 'master') {
+            this.logger.warn(`[Telegram] Event is not master (skip cancel notification): ${eventId}`);
+            return;
+        }
+        const text = `❌ Event Cancelled\n\nEvent "${event.title}" has been cancelled.`;
+        const bot = this.telegramService.getBot();
+        const tgGroup = await this.prisma.telegramGroup.findFirst({
+            where: { workspaceId: event.workspaceId },
+            select: { telegramChatId: true, type: true },
+        });
+        if (tgGroup?.telegramChatId && (tgGroup.type === 'group' || tgGroup.type === 'supergroup')) {
+            try {
+                await bot.api.sendMessage(tgGroup.telegramChatId, text);
+            }
+            catch (error) {
+                this.logger.warn(`[Telegram] Failed to deliver event cancelled notification to group ${tgGroup.telegramChatId}: ${eventId}`, error);
+            }
+            return;
+        }
+        const participations = await this.prisma.participation.findMany({
+            where: { eventId: event.id },
+            select: { user: { select: { telegramId: true } } },
+        });
+        await Promise.all(participations.map(async (p) => {
+            const telegramId = p.user?.telegramId;
+            if (!telegramId)
+                return;
+            try {
+                await bot.api.sendMessage(telegramId, text);
+            }
+            catch (error) {
+                this.logger.warn(`[Telegram] Failed to deliver event cancelled notification to user ${telegramId}: ${eventId}`, error);
+            }
+        }));
+    }
+    async sendEventUpdated(eventId) {
+        const event = await this.prisma.event.findFirst({
+            where: { id: eventId, deletedAt: null },
             select: {
                 id: true,
                 workspaceId: true,

@@ -22,6 +22,15 @@ let EventsController = class EventsController {
     constructor(eventsService) {
         this.eventsService = eventsService;
     }
+    async getEvent(eventId, userId) {
+        if (!userId) {
+            throw new common_1.UnauthorizedException('Отсутствует заголовок x-user-id');
+        }
+        return this.eventsService.getEventForEdit({
+            userId,
+            eventId,
+        });
+    }
     async createEvent(userId, dto) {
         if (!userId) {
             throw new common_1.UnauthorizedException('Отсутствует заголовок x-user-id');
@@ -44,8 +53,25 @@ let EventsController = class EventsController {
             dto,
         });
     }
+    async deleteEvent(eventId, userId) {
+        if (!userId) {
+            throw new common_1.UnauthorizedException('Отсутствует заголовок x-user-id');
+        }
+        return this.eventsService.deleteEvent({
+            userId,
+            eventId,
+        });
+    }
 };
 exports.EventsController = EventsController;
+__decorate([
+    (0, common_1.Get)(':eventId'),
+    __param(0, (0, common_1.Param)('eventId')),
+    __param(1, (0, common_1.Headers)('x-user-id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], EventsController.prototype, "getEvent", null);
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Headers)('x-user-id')),
@@ -63,6 +89,14 @@ __decorate([
     __metadata("design:paramtypes", [String, String, update_event_dto_1.UpdateEventDto]),
     __metadata("design:returntype", Promise)
 ], EventsController.prototype, "updateEvent", null);
+__decorate([
+    (0, common_1.Delete)(':eventId'),
+    __param(0, (0, common_1.Param)('eventId')),
+    __param(1, (0, common_1.Headers)('x-user-id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], EventsController.prototype, "deleteEvent", null);
 exports.EventsController = EventsController = __decorate([
     (0, common_1.Controller)('events'),
     __metadata("design:paramtypes", [events_service_1.EventsService])

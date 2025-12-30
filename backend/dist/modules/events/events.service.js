@@ -128,6 +128,67 @@ let EventsService = EventsService_1 = class EventsService {
             subEvents: created.subEvents,
         };
     }
+    async getEventForEdit(params) {
+        const { userId, eventId } = params;
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException('Пользователь не найден');
+        }
+        const masterEvent = await this.prisma.event.findFirst({
+            where: {
+                id: eventId,
+                type: 'master',
+                deletedAt: null,
+            },
+            select: {
+                id: true,
+                workspaceId: true,
+                title: true,
+                description: true,
+                date: true,
+                timeStart: true,
+                timeEnd: true,
+                location: true,
+            },
+        });
+        if (!masterEvent) {
+            throw new common_1.NotFoundException('Событие не найдено');
+        }
+        const membership = await this.prisma.workspaceMember.findUnique({
+            where: {
+                userId_workspaceId: {
+                    userId: user.id,
+                    workspaceId: masterEvent.workspaceId,
+                },
+            },
+            select: { role: true },
+        });
+        if (!membership || membership.role !== 'OWNER') {
+            throw new common_1.ForbiddenException('Только владелец Workspace может просматривать событие');
+        }
+        const subEvents = await this.prisma.event.findMany({
+            where: {
+                parentEventId: masterEvent.id,
+                deletedAt: null,
+            },
+            select: {
+                id: true,
+                title: true,
+                date: true,
+                timeStart: true,
+                timeEnd: true,
+                location: true,
+            },
+            orderBy: [{ date: 'asc' }, { timeStart: 'asc' }],
+        });
+        return {
+            masterEvent,
+            subEvents,
+        };
+    }
     async updateEvent(params) {
         const { userId, eventId, dto } = params;
         if (!dto || Object.keys(dto).length === 0) {
@@ -151,9 +212,13 @@ let EventsService = EventsService_1 = class EventsService {
                 timeStart: true,
                 timeEnd: true,
                 location: true,
+                deletedAt: true,
             },
         });
         if (!existing) {
+            throw new common_1.NotFoundException('Событие не найдено');
+        }
+        if (existing.deletedAt) {
             throw new common_1.NotFoundException('Событие не найдено');
         }
         const membership = await this.prisma.workspaceMember.findUnique({
@@ -205,6 +270,64 @@ let EventsService = EventsService_1 = class EventsService {
             }
         }
         return updated;
+    }
+    async deleteEvent(params) {
+        const { userId, eventId } = params;
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException('Пользователь не найден');
+        }
+        const masterEvent = await this.prisma.event.findFirst({
+            where: {
+                id: eventId,
+                type: 'master',
+                deletedAt: null,
+            },
+            select: {
+                id: true,
+                workspaceId: true,
+            },
+        });
+        if (!masterEvent) {
+            throw new common_1.NotFoundException('Событие не найдено');
+        }
+        const membership = await this.prisma.workspaceMember.findUnique({
+            where: {
+                userId_workspaceId: {
+                    userId: user.id,
+                    workspaceId: masterEvent.workspaceId,
+                },
+            },
+            select: { role: true },
+        });
+        if (!membership || membership.role !== 'OWNER') {
+            throw new common_1.ForbiddenException('Только владелец Workspace может удалить событие');
+        }
+        const now = new Date();
+        await this.prisma.$transaction(async (tx) => {
+            await tx.event.updateMany({
+                where: {
+                    OR: [
+                        { id: masterEvent.id },
+                        { parentEventId: masterEvent.id },
+                    ],
+                    deletedAt: null,
+                },
+                data: {
+                    deletedAt: now,
+                },
+            });
+        });
+        try {
+            await this.telegramNotificationService.sendEventCancelled(masterEvent.id);
+        }
+        catch (error) {
+            this.logger.warn(`[Telegram] Failed to send event cancelled notification ${masterEvent.id}`, error);
+        }
+        return { ok: true };
     }
 };
 exports.EventsService = EventsService;

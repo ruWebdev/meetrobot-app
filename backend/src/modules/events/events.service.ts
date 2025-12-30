@@ -141,6 +141,76 @@ export class EventsService {
         };
     }
 
+    async getEventForEdit(params: { userId: string; eventId: string }) {
+        const { userId, eventId } = params;
+
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true },
+        });
+
+        if (!user) {
+            throw new NotFoundException('Пользователь не найден');
+        }
+
+        const masterEvent = await this.prisma.event.findFirst({
+            where: {
+                id: eventId,
+                type: 'master',
+                deletedAt: null,
+            },
+            select: {
+                id: true,
+                workspaceId: true,
+                title: true,
+                description: true,
+                date: true,
+                timeStart: true,
+                timeEnd: true,
+                location: true,
+            },
+        });
+
+        if (!masterEvent) {
+            throw new NotFoundException('Событие не найдено');
+        }
+
+        const membership = await this.prisma.workspaceMember.findUnique({
+            where: {
+                userId_workspaceId: {
+                    userId: user.id,
+                    workspaceId: masterEvent.workspaceId,
+                },
+            },
+            select: { role: true },
+        });
+
+        if (!membership || membership.role !== 'OWNER') {
+            throw new ForbiddenException('Только владелец Workspace может просматривать событие');
+        }
+
+        const subEvents = await this.prisma.event.findMany({
+            where: {
+                parentEventId: masterEvent.id,
+                deletedAt: null,
+            },
+            select: {
+                id: true,
+                title: true,
+                date: true,
+                timeStart: true,
+                timeEnd: true,
+                location: true,
+            },
+            orderBy: [{ date: 'asc' }, { timeStart: 'asc' }],
+        });
+
+        return {
+            masterEvent,
+            subEvents,
+        };
+    }
+
     async updateEvent(params: { userId: string; eventId: string; dto: UpdateEventDto }) {
         const { userId, eventId, dto } = params;
 
@@ -168,10 +238,15 @@ export class EventsService {
                 timeStart: true,
                 timeEnd: true,
                 location: true,
+                deletedAt: true,
             },
         });
 
         if (!existing) {
+            throw new NotFoundException('Событие не найдено');
+        }
+
+        if (existing.deletedAt) {
             throw new NotFoundException('Событие не найдено');
         }
 
@@ -233,5 +308,73 @@ export class EventsService {
         }
 
         return updated;
+    }
+
+    async deleteEvent(params: { userId: string; eventId: string }) {
+        const { userId, eventId } = params;
+
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true },
+        });
+
+        if (!user) {
+            throw new NotFoundException('Пользователь не найден');
+        }
+
+        const masterEvent = await this.prisma.event.findFirst({
+            where: {
+                id: eventId,
+                type: 'master',
+                deletedAt: null,
+            },
+            select: {
+                id: true,
+                workspaceId: true,
+            },
+        });
+
+        if (!masterEvent) {
+            throw new NotFoundException('Событие не найдено');
+        }
+
+        const membership = await this.prisma.workspaceMember.findUnique({
+            where: {
+                userId_workspaceId: {
+                    userId: user.id,
+                    workspaceId: masterEvent.workspaceId,
+                },
+            },
+            select: { role: true },
+        });
+
+        if (!membership || membership.role !== 'OWNER') {
+            throw new ForbiddenException('Только владелец Workspace может удалить событие');
+        }
+
+        const now = new Date();
+
+        await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            await tx.event.updateMany({
+                where: {
+                    OR: [
+                        { id: masterEvent.id },
+                        { parentEventId: masterEvent.id },
+                    ],
+                    deletedAt: null,
+                },
+                data: {
+                    deletedAt: now,
+                },
+            });
+        });
+
+        try {
+            await this.telegramNotificationService.sendEventCancelled(masterEvent.id);
+        } catch (error) {
+            this.logger.warn(`[Telegram] Failed to send event cancelled notification ${masterEvent.id}`, error as any);
+        }
+
+        return { ok: true };
     }
 }
