@@ -113,7 +113,9 @@ export class TelegramService implements OnModuleInit {
                     return;
                 }
 
-                const cleaned = originalText.replace(/\n\nYour response:.*$/s, '').replace(/\nYour response:.*$/s, '');
+                const cleaned = originalText
+                    .replace(/\n\nВаш ответ:.*$/s, '')
+                    .replace(/\nВаш ответ:.*$/s, '');
                 const newText = `${cleaned}\n\n${responseLine}`;
 
                 try {
@@ -653,7 +655,7 @@ export class TelegramService implements OnModuleInit {
         let text = `Посещаемость\n\nСобытие: ${event.title}\nДата: ${date}\nВремя начала: ${event.timeStart}\n\n`;
 
         if (participations.length === 0) {
-            text += 'Нет участников со статусом accepted/tentative.';
+            text += 'Нет участников, которых нужно отметить.';
         } else {
             for (const p of participations) {
                 const name = p.user?.name || p.user?.telegramId || p.userId;

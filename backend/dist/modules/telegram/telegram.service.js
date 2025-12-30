@@ -108,7 +108,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 if (!originalText) {
                     return;
                 }
-                const cleaned = originalText.replace(/\n\nYour response:.*$/s, '').replace(/\nYour response:.*$/s, '');
+                const cleaned = originalText
+                    .replace(/\n\nВаш ответ:.*$/s, '')
+                    .replace(/\nВаш ответ:.*$/s, '');
                 const newText = `${cleaned}\n\n${responseLine}`;
                 try {
                     await ctx.editMessageText(newText, {
@@ -560,7 +562,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const date = event.date.toLocaleDateString('ru-RU');
         let text = `Посещаемость\n\nСобытие: ${event.title}\nДата: ${date}\nВремя начала: ${event.timeStart}\n\n`;
         if (participations.length === 0) {
-            text += 'Нет участников со статусом accepted/tentative.';
+            text += 'Нет участников, которых нужно отметить.';
         }
         else {
             for (const p of participations) {

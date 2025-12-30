@@ -19,7 +19,7 @@ function normalizeErrorMessage(data: any): string {
     try {
         return JSON.stringify(msg);
     } catch {
-        return 'Unexpected error';
+        return 'Неожиданная ошибка';
     }
 }
 
