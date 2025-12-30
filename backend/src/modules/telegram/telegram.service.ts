@@ -113,7 +113,13 @@ export class TelegramService implements OnModuleInit {
                 return ctx.reply('Workspace not found');
             }
 
-            const url = `https://${webappHost}/workspaces/${workspaceId}/events/create?userId=${user.id}`;
+            const trimmedWebappHost = webappHost.trim().replace(/\/+$/, '');
+            const webappBaseUrl =
+                trimmedWebappHost.startsWith('http://') || trimmedWebappHost.startsWith('https://')
+                    ? trimmedWebappHost
+                    : `https://${trimmedWebappHost}`;
+
+            const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}`;
             const keyboard = new InlineKeyboard().webApp('Create Event', url);
 
             this.logger.log(`[Telegram] Open WebApp for user ${user.id}, workspace ${workspaceId}`);
