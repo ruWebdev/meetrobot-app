@@ -137,18 +137,6 @@ export default function CreateEventPage(props: { workspaceId: string }) {
                     </div>
                 </div>
 
-                <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <div className="grid gap-3">
-                        <div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">Рабочее пространство</div>
-                            <div className="break-all text-sm font-mono text-slate-800 dark:text-slate-200">{workspaceId}</div>
-                        </div>
-                        <div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">Пользователь (x-user-id)</div>
-                            <div className="break-all text-sm font-mono text-slate-800 dark:text-slate-200">{userId || '—'}</div>
-                        </div>
-                    </div>
-                </div>
 
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <h2 className="text-base font-semibold">Основное событие</h2>
@@ -256,7 +244,6 @@ export default function CreateEventPage(props: { workspaceId: string }) {
                     >
                         {isSubmitting ? 'Создание…' : 'Создать событие'}
                     </button>
-                    <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">API: {apiBaseUrl}</div>
                 </div>
 
                 {error ? (

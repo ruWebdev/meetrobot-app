@@ -168,7 +168,7 @@ export class TelegramService implements OnModuleInit {
                 const result = await this.workspaceService.getWorkspaceInfoForTelegramGroup(telegramChatId);
                 if (!result.ok) {
                     this.logger.log(`Workspace-контекст не найден для /workspace: chatId=${telegramChatId}`);
-                    return ctx.reply('Эта группа не подключена ни к одному Workspace.');
+                    return ctx.reply('Эта группа не подключена ни к одному рабочему пространству.');
                 }
 
                 const createdAt = new Date(result.workspace.createdAt).toLocaleDateString('ru-RU');
@@ -215,7 +215,7 @@ export class TelegramService implements OnModuleInit {
                 if (!result.ok) {
                     if (result.reason === 'NO_CONTEXT') {
                         this.logger.log(`Workspace-контекст не найден для /whoami: chatId=${telegramChatId}`);
-                        return ctx.reply('Эта группа не подключена ни к одному Workspace.');
+                        return ctx.reply('Эта группа не подключена ни к одному рабочему пространству.');
                     }
 
                     if (result.reason === 'USER_NOT_REGISTERED') {
@@ -299,20 +299,20 @@ export class TelegramService implements OnModuleInit {
 
                 if (!result.ok) {
                     if (result.reason === 'NOT_OWNER') {
-                        return ctx.reply('Только владелец Workspace может подключить группу.');
+                        return ctx.reply('Только владелец рабочего пространства может подключить группу.');
                     }
                     if (result.reason === 'MULTIPLE_WORKSPACES') {
-                        return ctx.reply('У вас несколько Workspace. Подключение через группу пока невозможно.');
+                        return ctx.reply('У вас несколько рабочих пространств. Подключение через группу пока невозможно.');
                     }
                     if (result.reason === 'ALREADY_CONNECTED') {
-                        return ctx.reply('Эта группа уже подключена к Workspace.');
+                        return ctx.reply('Эта группа уже подключена к рабочему пространству.');
                     }
 
                     return ctx.reply('Не удалось выполнить операцию. Попробуйте позже.');
                 }
 
                 this.logger.log(`Telegram-группа успешно привязана: chatId=${telegramChatId}`);
-                return ctx.reply('Группа успешно подключена к Workspace.');
+                return ctx.reply('Группа успешно подключена к рабочему пространству.');
             } catch (error) {
                 this.logger.error('Ошибка при обработке команды /connect', error);
                 return ctx.reply('Не удалось выполнить операцию. Попробуйте позже.');
