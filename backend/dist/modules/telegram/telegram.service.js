@@ -110,7 +110,11 @@ let TelegramService = TelegramService_1 = class TelegramService {
             if (!webappHost) {
                 return ctx.reply('Workspace not found');
             }
-            const url = `https://${webappHost}/workspaces/${workspaceId}/events/create?userId=${user.id}`;
+            const trimmedWebappHost = webappHost.trim().replace(/\/+$/, '');
+            const webappBaseUrl = trimmedWebappHost.startsWith('http://') || trimmedWebappHost.startsWith('https://')
+                ? trimmedWebappHost
+                : `https://${trimmedWebappHost}`;
+            const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}`;
             const keyboard = new grammy_1.InlineKeyboard().webApp('Create Event', url);
             this.logger.log(`[Telegram] Open WebApp for user ${user.id}, workspace ${workspaceId}`);
             return ctx.reply('Open event creation form', {
