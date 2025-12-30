@@ -1,7 +1,9 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Bot } from 'grammy';
+import { Bot, InlineKeyboard } from 'grammy';
 import { WorkspaceService } from '../workspace/workspace.service';
+import { UserService } from '../user/user.service';
+import { PrismaService } from '../../infra/prisma/prisma.service';
 
 @Injectable()
 export class TelegramService implements OnModuleInit {
@@ -11,6 +13,8 @@ export class TelegramService implements OnModuleInit {
     constructor(
         private configService: ConfigService,
         private workspaceService: WorkspaceService,
+        private userService: UserService,
+        private prisma: PrismaService,
     ) {
         const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
         if (!token) {
@@ -31,6 +35,92 @@ export class TelegramService implements OnModuleInit {
     private setupHandlers() {
         const bot = this.bot;
         if (!bot) return;
+
+        bot.command('create_event', async (ctx) => {
+            const telegramId = ctx.from?.id?.toString();
+            if (!telegramId) {
+                return ctx.reply('User not registered');
+            }
+
+            const user = await this.userService.findByTelegramId(telegramId);
+            if (!user) {
+                return ctx.reply('User not registered');
+            }
+
+            let workspaceId: string | null = null;
+
+            if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
+                const telegramChatId = ctx.chat.id.toString();
+                const tgGroup = await this.prisma.telegramGroup.findUnique({
+                    where: { telegramChatId },
+                    select: { workspaceId: true },
+                });
+
+                workspaceId = tgGroup?.workspaceId ?? null;
+            } else if (ctx.chat.type === 'private') {
+                const memberships = await this.prisma.workspaceMember.findMany({
+                    where: { userId: user.id },
+                    select: { workspaceId: true },
+                });
+
+                if (memberships.length === 0) {
+                    return ctx.reply('No workspace available');
+                }
+
+                if (memberships.length > 1) {
+                    return ctx.reply('Please choose a workspace');
+                }
+
+                workspaceId = memberships[0].workspaceId;
+            } else {
+                return;
+            }
+
+            if (!workspaceId) {
+                return ctx.reply('Workspace not found');
+            }
+
+            const workspaceExists = await this.prisma.workspace.findUnique({
+                where: { id: workspaceId },
+                select: { id: true },
+            });
+
+            if (!workspaceExists) {
+                return ctx.reply('Workspace not found');
+            }
+
+            const membership = await this.prisma.workspaceMember.findUnique({
+                where: {
+                    userId_workspaceId: {
+                        userId: user.id,
+                        workspaceId,
+                    },
+                },
+                select: { role: true },
+            });
+
+            if (!membership) {
+                return ctx.reply('You are not a member of this workspace');
+            }
+
+            if (membership.role !== 'OWNER') {
+                this.logger.log(`[Telegram] Deny open WebApp (not OWNER) for user ${user.id}, workspace ${workspaceId}`);
+                return ctx.reply('Only workspace owner can create events');
+            }
+
+            const webappHost = this.configService.get<string>('WEBAPP_HOST');
+            if (!webappHost) {
+                return ctx.reply('Workspace not found');
+            }
+
+            const url = `https://${webappHost}/workspaces/${workspaceId}/events/create?userId=${user.id}`;
+            const keyboard = new InlineKeyboard().webApp('Create Event', url);
+
+            this.logger.log(`[Telegram] Open WebApp for user ${user.id}, workspace ${workspaceId}`);
+            return ctx.reply('Open event creation form', {
+                reply_markup: keyboard,
+            });
+        });
 
         bot.command('workspace', async (ctx) => {
             if (ctx.chat.type === 'private') {
