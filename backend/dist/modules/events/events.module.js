@@ -12,6 +12,7 @@ const events_controller_1 = require("./events.controller");
 const events_service_1 = require("./events.service");
 const workspace_module_1 = require("../workspace/workspace.module");
 const telegram_module_1 = require("../telegram/telegram.module");
+const telegram_notification_service_1 = require("../../telegram/telegram-notification.service");
 let EventsModule = class EventsModule {
 };
 exports.EventsModule = EventsModule;
@@ -19,7 +20,7 @@ exports.EventsModule = EventsModule = __decorate([
     (0, common_1.Module)({
         imports: [workspace_module_1.WorkspaceModule, telegram_module_1.TelegramModule],
         controllers: [events_controller_1.EventsController],
-        providers: [events_service_1.EventsService],
+        providers: [events_service_1.EventsService, telegram_notification_service_1.TelegramNotificationService],
         exports: [events_service_1.EventsService],
     })
 ], EventsModule);

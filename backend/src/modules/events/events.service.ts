@@ -1,14 +1,16 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infra/prisma/prisma.service';
-import { TelegramService } from '../telegram/telegram.service';
+import { TelegramNotificationService } from '../../telegram/telegram-notification.service';
 import { CreateEventDto } from './dto/create-event.dto';
 
 @Injectable()
 export class EventsService {
+    private readonly logger = new Logger(EventsService.name);
+
     constructor(
         private prisma: PrismaService,
-        private telegramService: TelegramService,
+        private telegramNotificationService: TelegramNotificationService,
     ) { }
 
     async createEvent(params: { userId: string; dto: CreateEventDto }) {
@@ -106,58 +108,15 @@ export class EventsService {
             return { masterEvent, subEvents, members };
         });
 
-        await this.deliverEventCardBestEffort({
-            workspaceId: dto.workspaceId,
-            masterEvent: created.masterEvent,
-            members: created.members,
-        });
+        try {
+            await this.telegramNotificationService.sendEventCreated(created.masterEvent.id);
+        } catch (error) {
+            this.logger.warn(`[Telegram] Failed to send event card ${created.masterEvent.id}`, error as any);
+        }
 
         return {
             masterEvent: created.masterEvent,
             subEvents: created.subEvents,
         };
-    }
-
-    private async deliverEventCardBestEffort(params: {
-        workspaceId: string;
-        masterEvent: { id: string; title: string; description: string | null; date: Date; timeStart: string; timeEnd: string; location: string };
-        members: Array<{ user: { telegramId: string } | null }>;
-    }) {
-        const bot = this.telegramService.getBot();
-
-        const text =
-            `Событие создано:\n` +
-            `Название: ${params.masterEvent.title}\n` +
-            (params.masterEvent.description ? `Описание: ${params.masterEvent.description}\n` : '') +
-            `Дата: ${params.masterEvent.date.toLocaleDateString('ru-RU')}\n` +
-            `Время: ${params.masterEvent.timeStart}–${params.masterEvent.timeEnd}\n` +
-            `Место: ${params.masterEvent.location}`;
-
-        const tgGroup = await this.prisma.telegramGroup.findFirst({
-            where: { workspaceId: params.workspaceId },
-            select: { telegramChatId: true },
-        });
-
-        if (tgGroup) {
-            try {
-                await bot.api.sendMessage(tgGroup.telegramChatId, text);
-            } catch {
-                // best-effort
-            }
-            return;
-        }
-
-        await Promise.all(
-            params.members.map(async (m) => {
-                const telegramId = m.user?.telegramId;
-                if (!telegramId) return;
-
-                try {
-                    await bot.api.sendMessage(telegramId, text);
-                } catch {
-                    // best-effort
-                }
-            }),
-        );
     }
 }

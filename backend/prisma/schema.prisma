@@ -10,6 +10,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ParticipationStatus {
+  pending
+  accepted
+  declined
+  tentative
+}
+
 model User {
   id          String   @id @default(uuid())
   telegramId  String   @unique
@@ -90,7 +97,7 @@ model Participation {
   event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   eventId          String
 
-  responseStatus     String   @default("pending")
+  responseStatus     ParticipationStatus   @default(pending)
   responseUpdatedAt  DateTime?
 
   @@unique([userId, eventId])

@@ -46,6 +46,75 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const bot = this.bot;
         if (!bot)
             return;
+        bot.on('callback_query:data', async (ctx) => {
+            const telegramId = ctx.from?.id?.toString();
+            if (!telegramId) {
+                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+            }
+            const user = await this.userService.findByTelegramId(telegramId);
+            if (!user) {
+                return ctx.answerCallbackQuery({ text: 'User not registered', show_alert: true });
+            }
+            const data = ctx.callbackQuery.data;
+            const parsed = this.parseParticipationCallbackData(data);
+            if (!parsed) {
+                if (data.startsWith('event:') && data.includes(':response:')) {
+                    this.logger.warn(`[Telegram] Invalid participation callback payload: ${data}`);
+                }
+                return;
+            }
+            const { eventId, status } = parsed;
+            try {
+                const participation = await this.prisma.participation.findUnique({
+                    where: {
+                        userId_eventId: {
+                            userId: user.id,
+                            eventId,
+                        },
+                    },
+                    select: { id: true },
+                });
+                if (!participation) {
+                    return ctx.answerCallbackQuery({ text: 'You are not invited to this event', show_alert: true });
+                }
+                await this.prisma.participation.update({
+                    where: { id: participation.id },
+                    data: {
+                        responseStatus: status,
+                        responseUpdatedAt: new Date(),
+                    },
+                });
+                this.logger.log(`[Participation] User ${user.id} set ${status} for event ${eventId}`);
+                const responseLine = this.getResponseLine(status);
+                // В группах редактирование сообщения изменит его для всех участников,
+                // что приведёт к перетиранию ответов. По ТЗ редактируем только для нажавшего,
+                // поэтому делаем editMessageText только в личном чате.
+                const chatType = ctx.callbackQuery.message?.chat?.type;
+                if (chatType !== 'private') {
+                    return ctx.answerCallbackQuery({ text: responseLine, show_alert: false });
+                }
+                await ctx.answerCallbackQuery({ text: 'OK', show_alert: false });
+                const originalText = ctx.callbackQuery.message?.text;
+                if (!originalText) {
+                    return;
+                }
+                const cleaned = originalText.replace(/\n\nYour response:.*$/s, '').replace(/\nYour response:.*$/s, '');
+                const newText = `${cleaned}\n\n${responseLine}`;
+                try {
+                    await ctx.editMessageText(newText, {
+                        parse_mode: 'Markdown',
+                        reply_markup: this.buildParticipationKeyboard(eventId),
+                    });
+                }
+                catch (error) {
+                    this.logger.warn(`[Telegram] Failed to edit event card message for event ${eventId}`, error);
+                }
+            }
+            catch (error) {
+                this.logger.error('Ошибка при обработке callback участия', error);
+                return ctx.answerCallbackQuery({ text: 'Unexpected error', show_alert: true });
+            }
+        });
         bot.command('create_event', async (ctx) => {
             const telegramId = ctx.from?.id?.toString();
             if (!telegramId) {
@@ -278,6 +347,26 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 return ctx.reply('Не удалось выполнить операцию. Попробуйте позже.');
             }
         });
+    }
+    parseParticipationCallbackData(data) {
+        const match = data.match(/^event:([^:]+):response:(accepted|declined|tentative)$/);
+        if (!match)
+            return null;
+        return { eventId: match[1], status: match[2] };
+    }
+    buildParticipationKeyboard(eventId) {
+        return new grammy_1.InlineKeyboard()
+            .text('✅ Will attend', `event:${eventId}:response:accepted`)
+            .text('❌ Will not attend', `event:${eventId}:response:declined`)
+            .row()
+            .text('❓ Not sure', `event:${eventId}:response:tentative`);
+    }
+    getResponseLine(status) {
+        if (status === 'accepted')
+            return 'Your response: ✅ Will attend';
+        if (status === 'declined')
+            return 'Your response: ❌ Will not attend';
+        return 'Your response: ❓ Not sure';
     }
     getBot() {
         if (!this.bot) {

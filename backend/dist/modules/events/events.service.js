@@ -8,17 +8,19 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var EventsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infra/prisma/prisma.service");
-const telegram_service_1 = require("../telegram/telegram.service");
-let EventsService = class EventsService {
+const telegram_notification_service_1 = require("../../telegram/telegram-notification.service");
+let EventsService = EventsService_1 = class EventsService {
     prisma;
-    telegramService;
-    constructor(prisma, telegramService) {
+    telegramNotificationService;
+    logger = new common_1.Logger(EventsService_1.name);
+    constructor(prisma, telegramNotificationService) {
         this.prisma = prisma;
-        this.telegramService = telegramService;
+        this.telegramNotificationService = telegramNotificationService;
     }
     async createEvent(params) {
         const { userId, dto } = params;
@@ -97,53 +99,21 @@ let EventsService = class EventsService {
             }
             return { masterEvent, subEvents, members };
         });
-        await this.deliverEventCardBestEffort({
-            workspaceId: dto.workspaceId,
-            masterEvent: created.masterEvent,
-            members: created.members,
-        });
+        try {
+            await this.telegramNotificationService.sendEventCreated(created.masterEvent.id);
+        }
+        catch (error) {
+            this.logger.warn(`[Telegram] Failed to send event card ${created.masterEvent.id}`, error);
+        }
         return {
             masterEvent: created.masterEvent,
             subEvents: created.subEvents,
         };
     }
-    async deliverEventCardBestEffort(params) {
-        const bot = this.telegramService.getBot();
-        const text = `Событие создано:\n` +
-            `Название: ${params.masterEvent.title}\n` +
-            (params.masterEvent.description ? `Описание: ${params.masterEvent.description}\n` : '') +
-            `Дата: ${params.masterEvent.date.toLocaleDateString('ru-RU')}\n` +
-            `Время: ${params.masterEvent.timeStart}–${params.masterEvent.timeEnd}\n` +
-            `Место: ${params.masterEvent.location}`;
-        const tgGroup = await this.prisma.telegramGroup.findFirst({
-            where: { workspaceId: params.workspaceId },
-            select: { telegramChatId: true },
-        });
-        if (tgGroup) {
-            try {
-                await bot.api.sendMessage(tgGroup.telegramChatId, text);
-            }
-            catch {
-                // best-effort
-            }
-            return;
-        }
-        await Promise.all(params.members.map(async (m) => {
-            const telegramId = m.user?.telegramId;
-            if (!telegramId)
-                return;
-            try {
-                await bot.api.sendMessage(telegramId, text);
-            }
-            catch {
-                // best-effort
-            }
-        }));
-    }
 };
 exports.EventsService = EventsService;
-exports.EventsService = EventsService = __decorate([
+exports.EventsService = EventsService = EventsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        telegram_service_1.TelegramService])
+        telegram_notification_service_1.TelegramNotificationService])
 ], EventsService);
