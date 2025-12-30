@@ -39,12 +39,12 @@ export class TelegramService implements OnModuleInit {
         bot.command('create_event', async (ctx) => {
             const telegramId = ctx.from?.id?.toString();
             if (!telegramId) {
-                return ctx.reply('User not registered');
+                return ctx.reply('Пользователь не зарегистрирован');
             }
 
             const user = await this.userService.findByTelegramId(telegramId);
             if (!user) {
-                return ctx.reply('User not registered');
+                return ctx.reply('Пользователь не зарегистрирован');
             }
 
             let workspaceId: string | null = null;
@@ -64,11 +64,11 @@ export class TelegramService implements OnModuleInit {
                 });
 
                 if (memberships.length === 0) {
-                    return ctx.reply('No workspace available');
+                    return ctx.reply('Нет доступных рабочих пространств');
                 }
 
                 if (memberships.length > 1) {
-                    return ctx.reply('Please choose a workspace');
+                    return ctx.reply('Пожалуйста, выберите рабочее пространство');
                 }
 
                 workspaceId = memberships[0].workspaceId;
@@ -77,7 +77,7 @@ export class TelegramService implements OnModuleInit {
             }
 
             if (!workspaceId) {
-                return ctx.reply('Workspace not found');
+                return ctx.reply('Рабочее пространство не найдено');
             }
 
             const workspaceExists = await this.prisma.workspace.findUnique({
@@ -86,7 +86,7 @@ export class TelegramService implements OnModuleInit {
             });
 
             if (!workspaceExists) {
-                return ctx.reply('Workspace not found');
+                return ctx.reply('Рабочее пространство не найдено');
             }
 
             const membership = await this.prisma.workspaceMember.findUnique({
@@ -100,17 +100,17 @@ export class TelegramService implements OnModuleInit {
             });
 
             if (!membership) {
-                return ctx.reply('You are not a member of this workspace');
+                return ctx.reply('Вы не состоите в этом рабочем пространстве');
             }
 
             if (membership.role !== 'OWNER') {
                 this.logger.log(`[Telegram] Deny open WebApp (not OWNER) for user ${user.id}, workspace ${workspaceId}`);
-                return ctx.reply('Only workspace owner can create events');
+                return ctx.reply('Только владелец рабочего пространства может создавать события');
             }
 
             const webappHost = this.configService.get<string>('WEBAPP_HOST');
             if (!webappHost) {
-                return ctx.reply('Workspace not found');
+                return ctx.reply('Рабочее пространство не найдено');
             }
 
             const trimmedWebappHost = webappHost.trim().replace(/\/+$/, '');
@@ -122,8 +122,23 @@ export class TelegramService implements OnModuleInit {
             const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}`;
             const keyboard = new InlineKeyboard().webApp('Create Event', url);
 
+            // В группах Telegram может отклонять web_app inline-кнопки (BUTTON_TYPE_INVALID).
+            // Чтобы не ломать сценарий, в группе отправляем кнопку в личные сообщения.
+            if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
+                try {
+                    await bot.api.sendMessage(ctx.from.id, 'Откройте форму создания события:', {
+                        reply_markup: keyboard,
+                    });
+                    this.logger.log(`[Telegram] Open WebApp for user ${user.id}, workspace ${workspaceId}`);
+                    return ctx.reply('Я отправил кнопку для открытия Web App вам в личные сообщения.');
+                } catch {
+                    this.logger.log(`[Telegram] Failed to send WebApp button to DM for user ${user.id}, workspace ${workspaceId}`);
+                    return ctx.reply('Не удалось отправить кнопку в личные сообщения. Откройте чат с ботом и попробуйте снова.');
+                }
+            }
+
             this.logger.log(`[Telegram] Open WebApp for user ${user.id}, workspace ${workspaceId}`);
-            return ctx.reply('Open event creation form', {
+            return ctx.reply('Откройте форму создания события:', {
                 reply_markup: keyboard,
             });
         });
