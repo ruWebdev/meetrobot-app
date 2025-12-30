@@ -215,7 +215,9 @@ let TelegramNotificationService = TelegramNotificationService_1 = class Telegram
             .text('Буду участвовать', `event:${eventId}:response:accepted`)
             .text('Не буду участвовать', `event:${eventId}:response:declined`)
             .row()
-            .text('Пока не уверен', `event:${eventId}:response:tentative`);
+            .text('Пока не уверен', `event:${eventId}:response:tentative`)
+            .row()
+            .text('Редактировать', `event:${eventId}:edit`);
     }
     buildEventCardText(params) {
         const date = params.masterEvent.date.toLocaleDateString('ru-RU');

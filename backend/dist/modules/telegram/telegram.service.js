@@ -59,6 +59,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
             if (data.startsWith('att:')) {
                 return this.handleAttendanceCallback({ ctx, userId: user.id, data });
             }
+            if (data.startsWith('event:') && data.endsWith(':edit')) {
+                return this.handleEditEventCallback({ ctx, userId: user.id, data });
+            }
             const parsed = this.parseParticipationCallbackData(data);
             if (!parsed) {
                 if (data.startsWith('event:') && data.includes(':response:')) {
@@ -442,6 +445,72 @@ let TelegramService = TelegramService_1 = class TelegramService {
         if (!match)
             return null;
         return { eventId: match[1], status: match[2] };
+    }
+    async handleEditEventCallback(params) {
+        const { ctx, userId, data } = params;
+        const match = data.match(/^event:([^:]+):edit$/);
+        if (!match) {
+            return;
+        }
+        const eventId = match[1];
+        try {
+            const event = await this.prisma.event.findFirst({
+                where: {
+                    id: eventId,
+                    type: 'master',
+                    deletedAt: null,
+                },
+                select: { id: true, workspaceId: true },
+            });
+            if (!event) {
+                return ctx.answerCallbackQuery({ text: 'Событие недоступно', show_alert: true });
+            }
+            const membership = await this.prisma.workspaceMember.findUnique({
+                where: {
+                    userId_workspaceId: {
+                        userId,
+                        workspaceId: event.workspaceId,
+                    },
+                },
+                select: { role: true },
+            });
+            if (!membership || membership.role !== 'OWNER') {
+                return ctx.answerCallbackQuery({ text: 'Недостаточно прав', show_alert: true });
+            }
+            const webappHost = this.configService.get('WEBAPP_HOST');
+            if (!webappHost) {
+                return ctx.answerCallbackQuery({ text: 'Не удалось открыть редактор', show_alert: true });
+            }
+            const trimmedWebappHost = webappHost.trim().replace(/\/+$/g, '');
+            const webappBaseUrl = trimmedWebappHost.startsWith('http://') || trimmedWebappHost.startsWith('https://')
+                ? trimmedWebappHost
+                : `https://${trimmedWebappHost}`;
+            const apiBaseUrlFromEnv = this.configService.get('API_BASE_URL');
+            const apiBaseUrl = apiBaseUrlFromEnv?.trim() ? apiBaseUrlFromEnv.trim().replace(/\/+$/g, '') : webappBaseUrl;
+            const url = `${webappBaseUrl}/workspaces/${event.workspaceId}/events/${event.id}/edit?userId=${userId}&apiBaseUrl=${encodeURIComponent(apiBaseUrl)}`;
+            const keyboard = new grammy_1.InlineKeyboard().webApp('Открыть редактор события', url);
+            const telegramTo = ctx.from?.id;
+            if (!telegramTo) {
+                return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
+            }
+            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
+            try {
+                await this.getBot().api.sendMessage(telegramTo, 'Откройте редактор события:', {
+                    reply_markup: keyboard,
+                });
+            }
+            catch {
+                return ctx.reply('Не удалось отправить кнопку в личные сообщения. Откройте чат с ботом и попробуйте снова.');
+            }
+            const chatType = ctx.callbackQuery.message?.chat?.type;
+            if (chatType === 'group' || chatType === 'supergroup') {
+                return ctx.reply('Я отправил кнопку для редактирования вам в личные сообщения.');
+            }
+        }
+        catch (error) {
+            this.logger.error('Ошибка при обработке callback редактирования события', error);
+            return ctx.answerCallbackQuery({ text: 'Неожиданная ошибка', show_alert: true });
+        }
     }
     async handleAttendanceCallback(params) {
         const { ctx, userId, data } = params;

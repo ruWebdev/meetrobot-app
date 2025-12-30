@@ -231,7 +231,9 @@ export class TelegramNotificationService {
             .text('Буду участвовать', `event:${eventId}:response:accepted`)
             .text('Не буду участвовать', `event:${eventId}:response:declined`)
             .row()
-            .text('Пока не уверен', `event:${eventId}:response:tentative`);
+            .text('Пока не уверен', `event:${eventId}:response:tentative`)
+            .row()
+            .text('Редактировать', `event:${eventId}:edit`);
     }
 
     private buildEventCardText(params: {

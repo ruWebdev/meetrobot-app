@@ -1,0 +1,5 @@
+export enum FlowType {
+    EVENT_SERIES = 'EVENT_SERIES',
+    SINGLE_EVENT = 'SINGLE_EVENT',
+    SERVICE_BOOKING = 'SERVICE_BOOKING',
+}
