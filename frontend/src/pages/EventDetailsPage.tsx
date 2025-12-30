@@ -12,16 +12,18 @@ export default function EventDetailsPage(props: { workspaceId: string; eventId: 
     }, []);
 
     return (
-        <div style={{ maxWidth: 720, margin: '0 auto', padding: 16, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial' }}>
-            <h1 style={{ marginTop: 0 }}>Событие</h1>
-            <div style={{ color: '#666' }}>Заглушка экрана (по ТЗ допускается).</div>
+        <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+            <div className="mx-auto max-w-2xl p-4">
+                <h1 className="text-xl font-semibold">Событие</h1>
+                <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">Заглушка экрана (допускается по ТЗ).</div>
 
-            <div style={{ marginTop: 12, padding: 12, border: '1px solid #ddd', borderRadius: 8 }}>
-                <div style={{ fontSize: 12, color: '#666' }}>Workspace</div>
-                <div style={{ wordBreak: 'break-all' }}>{props.workspaceId}</div>
+                <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Рабочее пространство</div>
+                    <div className="break-all font-mono text-sm">{props.workspaceId}</div>
 
-                <div style={{ marginTop: 10, fontSize: 12, color: '#666' }}>Event ID</div>
-                <div style={{ wordBreak: 'break-all' }}>{props.eventId}</div>
+                    <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">ID события</div>
+                    <div className="break-all font-mono text-sm">{props.eventId}</div>
+                </div>
             </div>
         </div>
     );

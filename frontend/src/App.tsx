@@ -1,4 +1,5 @@
 import React from 'react';
+import WebApp from '@twa-dev/sdk';
 
 import CreateEventPage from './pages/CreateEventPage';
 import EventDetailsPage from './pages/EventDetailsPage';
@@ -16,6 +17,17 @@ function matchEventDetailsRoute(pathname: string): { workspaceId: string; eventI
 }
 
 function App() {
+    try {
+        const scheme = WebApp.colorScheme;
+        if (scheme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    } catch {
+        // ignore (например, запуск вне Telegram)
+    }
+
     const pathname = window.location.pathname;
 
     const createRoute = matchCreateEventRoute(pathname);
@@ -29,16 +41,17 @@ function App() {
     }
 
     return (
-        <div style={{ maxWidth: 720, margin: '0 auto', padding: 16, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial' }}>
-            <h1 style={{ marginTop: 0 }}>MeetRobot Web App</h1>
-            <div style={{ color: '#666' }}>Неизвестный маршрут.</div>
-            <div style={{ marginTop: 10, fontSize: 12, color: '#666' }}>
-                Ожидаемые пути:
-                <div>
-                    <code>/workspaces/:workspaceId/events/create</code>
-                </div>
-                <div>
-                    <code>/workspaces/:workspaceId/events/:eventId</code>
+        <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+            <div className="mx-auto max-w-2xl p-4">
+                <h1 className="text-xl font-semibold">MeetRobot Web App</h1>
+                <div className="mt-2 text-sm text-slate-600 dark:text-slate-400">Неизвестный маршрут.</div>
+
+                <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                    <div className="font-medium">Ожидаемые пути:</div>
+                    <div className="mt-2 space-y-1 font-mono text-xs">
+                        <div>/workspaces/:workspaceId/events/create</div>
+                        <div>/workspaces/:workspaceId/events/:eventId</div>
+                    </div>
                 </div>
             </div>
         </div>

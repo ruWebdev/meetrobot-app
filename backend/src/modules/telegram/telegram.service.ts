@@ -174,8 +174,8 @@ export class TelegramService implements OnModuleInit {
                 const createdAt = new Date(result.workspace.createdAt).toLocaleDateString('ru-RU');
 
                 return ctx.reply(
-                    `Workspace: ${result.workspace.name}\n` +
-                    `Создан: ${createdAt}\n` +
+                    `Рабочее пространство: ${result.workspace.name}\n` +
+                    `Создано: ${createdAt}\n` +
                     `Участников: ${result.workspace.membersCount}\n` +
                     `Подключённых групп: ${result.workspace.telegramGroupsCount}`,
                 );
@@ -227,13 +227,13 @@ export class TelegramService implements OnModuleInit {
 
                 if (!result.isMember) {
                     return ctx.reply(
-                        `Workspace: ${result.workspaceName}\n` +
-                        'Вы не состоите в этом Workspace.',
+                        `Рабочее пространство: ${result.workspaceName}\n` +
+                        'Вы не состоите в этом рабочем пространстве.',
                     );
                 }
 
                 return ctx.reply(
-                    `Workspace: ${result.workspaceName}\n` +
+                    `Рабочее пространство: ${result.workspaceName}\n` +
                     `Роль: ${result.role}`,
                 );
             } catch (error) {
