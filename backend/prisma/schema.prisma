@@ -23,6 +23,23 @@ enum AttendanceStatus {
   absent
 }
 
+enum TimeSlotStatus {
+  AVAILABLE
+  RESERVED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED_BY_CLIENT
+  CANCELLED_BY_PROVIDER
+  NO_SHOW
+  COMPLETED
+}
+
 model User {
   id          String   @id @default(uuid())
   telegramId  String   @unique
@@ -124,4 +141,82 @@ model Attendance {
   markedAt  DateTime         @default(now())
 
   @@unique([eventId, userId])
+}
+
+model Provider {
+  id             String   @id @default(uuid())
+  name           String
+  telegramUserId String?  @unique
+  createdAt      DateTime @default(now())
+
+  services  Service[]
+  timeSlots TimeSlot[]
+  bookings  Booking[]
+}
+
+model Client {
+  id             String   @id @default(uuid())
+  name           String
+  telegramUserId String   @unique
+  createdAt      DateTime @default(now())
+
+  bookings Booking[]
+}
+
+model Service {
+  id                  String   @id @default(uuid())
+  provider            Provider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  providerId          String
+  title               String
+  durationMinutes     Int
+  price               Int
+  description         String?
+  bufferBeforeMinutes Int      @default(0)
+  bufferAfterMinutes  Int      @default(0)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  timeSlots TimeSlot[]
+  bookings  Booking[]
+
+  @@unique([id, providerId])
+  @@index([providerId])
+}
+
+model TimeSlot {
+  id        String        @id @default(uuid())
+  provider  Provider      @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  providerId String
+  service   Service       @relation(fields: [serviceId, providerId], references: [id, providerId], onDelete: Restrict)
+  serviceId String
+  startAt   DateTime
+  endAt     DateTime
+  status    TimeSlotStatus
+  createdAt DateTime      @default(now())
+
+  booking Booking?
+
+  @@unique([id, providerId, serviceId])
+
+  @@index([startAt])
+  @@index([providerId, startAt])
+}
+
+model Booking {
+  id          String        @id @default(uuid())
+  client      Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  clientId    String
+  provider    Provider      @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  providerId  String
+  service     Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  serviceId   String
+  timeSlot    TimeSlot      @relation(fields: [timeSlotId, providerId, serviceId], references: [id, providerId, serviceId], onDelete: Restrict)
+  timeSlotId  String        @unique
+  status      BookingStatus
+  cancelReason String?
+  createdAt   DateTime      @default(now())
+
+  @@index([clientId])
+  @@index([providerId])
+  @@index([serviceId])
 }
