@@ -1,14 +1,19 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { IsNotEmpty, IsString } from 'class-validator';
 import { AuthContext } from '../auth/auth.context';
 import { ActiveWorkspaceGuard, UserGuard } from '../auth/auth.guard';
 import { WorkspaceService } from './workspace.service';
 import { UserService } from '../user/user.service';
 
 class CreateWorkspaceDto {
+    @IsString()
+    @IsNotEmpty()
     title!: string;
 }
 
 class UpdateWorkspaceDto {
+    @IsString()
+    @IsNotEmpty()
     title!: string;
 }
 
