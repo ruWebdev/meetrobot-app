@@ -4,6 +4,7 @@ import { InlineKeyboard } from 'grammy';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
 import { UserService } from '../../user/user.service';
 import { WorkspaceService } from '../../workspace/workspace.service';
+import { EventsService } from '../../events/events.service';
 import { FlowHandler } from './flow-handler';
 import { buildExitKeyboard } from './flow-keyboards';
 
@@ -16,6 +17,7 @@ export class EventSeriesFlow implements FlowHandler {
         private readonly workspaceService: WorkspaceService,
         private readonly userService: UserService,
         private readonly prisma: PrismaService,
+        private readonly eventsService: EventsService,
     ) { }
 
     async onEnter(ctx: any): Promise<void> {

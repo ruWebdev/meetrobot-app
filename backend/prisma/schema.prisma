@@ -40,32 +40,46 @@ enum BookingStatus {
   COMPLETED
 }
 
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 model User {
-  id          String   @id @default(uuid())
-  telegramId  String   @unique
-  name        String?
-  createdAt   DateTime @default(now())
-  memberships WorkspaceMember[]
-  workspaces  Workspace[]
-  participations Participation[]
-  createdEvents Event[] @relation("EventCreatedBy")
-  attendances Attendance[]
+  id                String    @id @default(uuid())
+  telegramId        String    @unique
+  firstName         String    @default("")
+  lastName          String?
+  username          String?
+  createdAt         DateTime  @default(now())
+  activeWorkspaceId String?
+
+  activeWorkspace   Workspace? @relation("ActiveWorkspace", fields: [activeWorkspaceId], references: [id])
+  memberships       WorkspaceMember[]
+  workspaces        Workspace[]
+  participations    Participation[]
+  createdEvents     Event[]        @relation("EventCreatedBy")
+  attendances       Attendance[]
 }
 
 model Workspace {
-  id           String             @id @default(uuid())
-  name         String
-  ownerId      String
-  owner        User               @relation(fields: [ownerId], references: [id])
-  createdAt    DateTime           @default(now())
-  members      WorkspaceMember[]
-  telegramGroups TelegramGroup[]
-  events Event[]
+  id              String             @id @default(uuid())
+  title           String
+  createdByUserId String
+  createdByUser   User               @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime           @default(now())
+
+  members         WorkspaceMember[]
+  telegramGroups  TelegramGroup[]
+  events          Event[]
+
+  activeUsers     User[]             @relation("ActiveWorkspace")
 }
 
 model WorkspaceMember {
   id          String    @id @default(uuid())
-  role        String    @default("MEMBER")
+  role        WorkspaceRole @default(MEMBER)
   user        User      @relation(fields: [userId], references: [id])
   userId      String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])

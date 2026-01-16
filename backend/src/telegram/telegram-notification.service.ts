@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { TelegramService } from '../modules/telegram/telegram.service';
 import { InlineKeyboard } from 'grammy';
@@ -9,6 +9,7 @@ export class TelegramNotificationService {
 
     constructor(
         private readonly prisma: PrismaService,
+        @Inject(forwardRef(() => TelegramService))
         private readonly telegramService: TelegramService,
     ) { }
 

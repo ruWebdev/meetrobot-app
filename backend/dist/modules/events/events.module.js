@@ -11,17 +11,16 @@ const common_1 = require("@nestjs/common");
 const events_controller_1 = require("./events.controller");
 const events_service_1 = require("./events.service");
 const workspace_module_1 = require("../workspace/workspace.module");
-const telegram_module_1 = require("../telegram/telegram.module");
-const telegram_notification_service_1 = require("../../telegram/telegram-notification.service");
 const queue_module_1 = require("../../infra/queue/queue.module");
+const telegram_module_1 = require("../telegram/telegram.module");
 let EventsModule = class EventsModule {
 };
 exports.EventsModule = EventsModule;
 exports.EventsModule = EventsModule = __decorate([
     (0, common_1.Module)({
-        imports: [workspace_module_1.WorkspaceModule, telegram_module_1.TelegramModule, queue_module_1.QueueModule],
+        imports: [workspace_module_1.WorkspaceModule, queue_module_1.QueueModule, telegram_module_1.TelegramModule],
         controllers: [events_controller_1.EventsController],
-        providers: [events_service_1.EventsService, telegram_notification_service_1.TelegramNotificationService],
+        providers: [events_service_1.EventsService],
         exports: [events_service_1.EventsService],
     })
 ], EventsModule);

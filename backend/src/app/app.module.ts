@@ -8,7 +8,6 @@ import { UserModule } from '../modules/user/user.module';
 import { WorkspaceModule } from '../modules/workspace/workspace.module';
 import { AuthModule } from '../modules/auth/auth.module';
 import { TelegramModule } from '../modules/telegram/telegram.module';
-import { EventsModule } from '../modules/events/events.module';
 
 @Module({
     imports: [
@@ -23,7 +22,6 @@ import { EventsModule } from '../modules/events/events.module';
         WorkspaceModule,
         AuthModule,
         TelegramModule,
-        EventsModule,
     ],
 })
 export class AppModule { }

@@ -2,14 +2,13 @@ import { Module } from '@nestjs/common';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { WorkspaceModule } from '../workspace/workspace.module';
-import { TelegramModule } from '../telegram/telegram.module';
-import { TelegramNotificationService } from '../../telegram/telegram-notification.service';
 import { QueueModule } from '../../infra/queue/queue.module';
+import { TelegramModule } from '../telegram/telegram.module';
 
 @Module({
-    imports: [WorkspaceModule, TelegramModule, QueueModule],
+    imports: [WorkspaceModule, QueueModule, TelegramModule],
     controllers: [EventsController],
-    providers: [EventsService, TelegramNotificationService],
+    providers: [EventsService],
     exports: [EventsService],
 })
 export class EventsModule { }

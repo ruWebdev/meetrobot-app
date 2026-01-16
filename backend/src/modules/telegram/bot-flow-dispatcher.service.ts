@@ -1,53 +1,45 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InlineKeyboard } from 'grammy';
+import { ConfigService } from '@nestjs/config';
 import { WorkspaceService } from '../workspace/workspace.service';
 import { UserService } from '../user/user.service';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { FlowType } from './flow-type';
-import { UserSessionService } from './user-session.service';
-import { FlowHandler } from './flows/flow-handler';
-import { EventSeriesFlow } from './flows/event-series.flow';
-import { SingleEventFlow } from './flows/single-event.flow';
-import { ServiceBookingFlow } from './flows/service-booking.flow';
 
 @Injectable()
 export class BotFlowDispatcher {
+    private readonly logger = new Logger(BotFlowDispatcher.name);
+
     constructor(
         private readonly userService: UserService,
         private readonly workspaceService: WorkspaceService,
-        private readonly prisma: PrismaService,
-        private readonly userSessionService: UserSessionService,
-        private readonly eventSeriesFlow: EventSeriesFlow,
-        private readonly singleEventFlow: SingleEventFlow,
-        private readonly serviceBookingFlow: ServiceBookingFlow,
+        private readonly configService: ConfigService,
     ) { }
 
     async onUpdate(ctx: any): Promise<void> {
         const telegramUserId = ctx.from?.id?.toString?.();
-        const telegramChatId = ctx.chat?.id?.toString?.();
 
-        if (!telegramUserId || !telegramChatId) {
+        if (!telegramUserId) {
             return;
         }
 
-        await this.userService.findOrCreateUser(telegramUserId);
-
-        const workspaceId = await this.resolveWorkspaceId({ ctx, telegramUserId, telegramChatId });
-        if (!workspaceId) {
-            await this.safeReply(ctx, 'Рабочее пространство не найдено.');
+        if (ctx.chat?.type !== 'private') {
+            // На этапах 1–2 вся работа с Workspace идёт через личный чат с ботом
+            if (this.isCommand(ctx, 'start')) {
+                await this.safeReply(ctx, 'Для управления рабочими пространствами откройте личный чат со мной и отправьте команду /start.');
+            }
             return;
         }
 
-        const session = await this.userSessionService.getOrCreate({ telegramUserId, telegramChatId, workspaceId });
+        const profile = {
+            firstName: ctx.from?.first_name ?? null,
+            lastName: ctx.from?.last_name ?? null,
+            username: ctx.from?.username ?? null,
+        };
 
-        const handledGlobal = await this.tryHandleGlobal({ ctx, session });
-        if (handledGlobal) {
-            return;
-        }
+        const user = await this.userService.findOrCreateUser(telegramUserId, profile);
 
-        if (session.activeFlowType) {
-            const flow = this.getFlow(session.activeFlowType);
-            await flow.onUpdate(ctx);
+        const callbackData = ctx.callbackQuery?.data as string | undefined;
+        if (callbackData) {
+            await this.handleCallback(ctx, user.id, callbackData);
             return;
         }
 
@@ -60,127 +52,140 @@ export class BotFlowDispatcher {
         }
 
         if (isStart) {
-            await this.showWelcome(ctx);
+            await this.showWorkspaceEntry(ctx, user.id);
             return;
         }
 
-        if (this.isAnyUserMessage(ctx) || this.isCallbackQuery(ctx)) {
-            await this.showWelcome(ctx);
+        // Любое другое сообщение в личке ведёт к экрану выбора/создания Workspace
+        if (this.isAnyUserMessage(ctx)) {
+            await this.showWorkspaceEntry(ctx, user.id);
         }
     }
 
-    private getFlow(flowType: FlowType): FlowHandler {
-        if (flowType === FlowType.EVENT_SERIES) return this.eventSeriesFlow;
-        if (flowType === FlowType.SINGLE_EVENT) return this.singleEventFlow;
-        return this.serviceBookingFlow;
-    }
+    private async showWorkspaceEntry(ctx: any, userId: string): Promise<void> {
+        const memberships = await this.workspaceService.getUserMemberships(userId);
 
-    private async tryHandleGlobal(params: { ctx: any; session: { telegramUserId: string; telegramChatId: string; workspaceId: string; activeFlowType: FlowType | null } }): Promise<boolean> {
-        const { ctx, session } = params;
-
-        if (this.isCommand(ctx, 'help')) {
-            await this.showHelp(ctx);
-            return true;
+        if (memberships.length === 0) {
+            await this.showNoWorkspace(ctx);
+            return;
         }
 
-        const callbackData = ctx.callbackQuery?.data as string | undefined;
-        if (!callbackData) {
-            return false;
-        }
-
-        if (callbackData === 'global:help') {
-            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
-            await this.showHelp(ctx);
-            return true;
-        }
-
-        if (callbackData === 'global:exit') {
-            if (session.activeFlowType) {
-                const flow = this.getFlow(session.activeFlowType);
-                await flow.onExit(ctx);
+        if (memberships.length === 1) {
+            const membership = memberships[0];
+            if ((membership.workspace as any).id) {
+                await this.userService.setActiveWorkspace(userId, membership.workspace.id);
             }
-
-            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
-            await this.userSessionService.reset({
-                telegramUserId: session.telegramUserId,
-                telegramChatId: session.telegramChatId,
-                workspaceId: session.workspaceId,
+            await this.showWorkspaceHome(ctx, {
+                userId,
+                workspaceId: membership.workspace.id,
+                title: membership.workspace.title,
+                role: membership.role,
             });
-            await this.showWelcome(ctx);
-            return true;
+            return;
         }
 
-        if (callbackData === `menu:${FlowType.EVENT_SERIES}`) {
-            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
-            await this.userSessionService.updateActiveFlow({
-                telegramUserId: session.telegramUserId,
-                telegramChatId: session.telegramChatId,
-                workspaceId: session.workspaceId,
-                activeFlowType: FlowType.EVENT_SERIES,
-                activeEntityId: null,
-            });
-            await this.eventSeriesFlow.onEnter(ctx);
-            return true;
-        }
-
-        if (callbackData === `menu:${FlowType.SINGLE_EVENT}`) {
-            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
-            await this.userSessionService.updateActiveFlow({
-                telegramUserId: session.telegramUserId,
-                telegramChatId: session.telegramChatId,
-                workspaceId: session.workspaceId,
-                activeFlowType: FlowType.SINGLE_EVENT,
-                activeEntityId: null,
-            });
-            await this.singleEventFlow.onEnter(ctx);
-            return true;
-        }
-
-        if (callbackData === `menu:${FlowType.SERVICE_BOOKING}`) {
-            await ctx.answerCallbackQuery({ text: 'Готово', show_alert: false });
-            await this.userSessionService.updateActiveFlow({
-                telegramUserId: session.telegramUserId,
-                telegramChatId: session.telegramChatId,
-                workspaceId: session.workspaceId,
-                activeFlowType: FlowType.SERVICE_BOOKING,
-                activeEntityId: null,
-            });
-            await this.serviceBookingFlow.onEnter(ctx);
-            return true;
-        }
-
-        return false;
+        await this.showWorkspaceSelector(ctx, memberships.map((m) => ({ id: m.workspace.id, title: m.workspace.title, role: m.role })));
     }
 
-    private async showWelcome(ctx: any): Promise<void> {
+    private async showNoWorkspace(ctx: any): Promise<void> {
         const text =
-            'Здравствуйте!\n\n' +
-            'Я помогу вам управлять мероприятиями или записываться на услуги.\n\n' +
-            'Выберите, с чем вы хотите работать:';
+            'У вас ещё нет ни одного рабочего пространства.\n\n' +
+            'Вы можете создать своё первое рабочее пространство. Все дальнейшие действия в системе будут выполняться только в его контексте.';
 
-        const keyboard = new InlineKeyboard()
-            .text('🎭 Мероприятия с программой', `menu:${FlowType.EVENT_SERIES}`)
-            .row()
-            .text('📅 Разовое мероприятие', `menu:${FlowType.SINGLE_EVENT}`)
-            .row()
-            .text('💅 Запись на услугу', `menu:${FlowType.SERVICE_BOOKING}`)
-            .row()
-            .text('ℹ️ Помощь', 'global:help');
+        const keyboard = new InlineKeyboard().text('Создать рабочее пространство', 'ws:create');
 
         await this.safeReply(ctx, text, keyboard);
+    }
+
+    private async showWorkspaceHome(ctx: any, params: { userId: string; workspaceId: string; title: string; role: string }): Promise<void> {
+        const text =
+            `Активное рабочее пространство: ${params.title}\n` +
+            `Ваша роль: ${params.role}`;
+
+        const keyboard = new InlineKeyboard();
+        const webAppUrl = this.buildWebAppUrl({
+            userId: params.userId,
+            activeWorkspaceId: params.workspaceId,
+        });
+        if (webAppUrl) {
+            keyboard.webApp('Открыть рабочее пространство', webAppUrl).row();
+        }
+        keyboard.text('Сменить рабочее пространство', 'ws:change');
+
+        await this.safeReply(ctx, text, keyboard);
+    }
+
+    private async showWorkspaceSelector(ctx: any, workspaces: { id: string; title: string; role: string }[]): Promise<void> {
+        const text = 'Выберите рабочее пространство, с которым хотите работать:';
+
+        const keyboard = new InlineKeyboard();
+        for (const ws of workspaces) {
+            keyboard.text(`${ws.title} (${ws.role})`, `ws:select:${ws.id}`).row();
+        }
+
+        await this.safeReply(ctx, text, keyboard);
+    }
+
+    private async handleCallback(ctx: any, userId: string, callbackData: string): Promise<void> {
+        if (callbackData === 'ws:create') {
+            await ctx.answerCallbackQuery({ text: 'Создание рабочего пространства', show_alert: false });
+
+            const title = 'Моё рабочее пространство';
+            const workspace = await this.workspaceService.createWorkspace(userId, title);
+            await this.userService.setActiveWorkspace(userId, workspace.id);
+
+            await this.safeReply(ctx, `Создано рабочее пространство: ${workspace.title}`);
+            await this.showWorkspaceHome(ctx, {
+                userId,
+                workspaceId: workspace.id,
+                title: workspace.title,
+                role: 'OWNER',
+            });
+            return;
+        }
+
+        if (callbackData === 'ws:change') {
+            await ctx.answerCallbackQuery({ text: 'Выбор рабочего пространства', show_alert: false });
+
+            const memberships = await this.workspaceService.getUserMemberships(userId);
+            if (memberships.length === 0) {
+                await this.showNoWorkspace(ctx);
+                return;
+            }
+
+            await this.showWorkspaceSelector(ctx, memberships.map((m) => ({ id: m.workspace.id, title: m.workspace.title, role: m.role })));
+            return;
+        }
+
+        if (callbackData.startsWith('ws:select:')) {
+            await ctx.answerCallbackQuery({ text: 'Рабочее пространство выбрано', show_alert: false });
+            const workspaceId = callbackData.slice('ws:select:'.length);
+
+            const membership = await this.workspaceService.ensureUserMembershipInWorkspace({ userId, workspaceId });
+            if (!membership) {
+                await this.safeReply(ctx, 'Вы не состоите в этом рабочем пространстве.');
+                return;
+            }
+
+            await this.userService.setActiveWorkspace(userId, workspaceId);
+            await this.showWorkspaceHome(ctx, {
+                userId,
+                workspaceId: membership.workspace.id,
+                title: membership.workspace.title,
+                role: membership.role,
+            });
+            return;
+        }
     }
 
     private async showHelp(ctx: any): Promise<void> {
         const text =
             'Справка\n\n' +
-            'Этот бот позволяет:\n' +
-            '— управлять мероприятиями с несколькими событиями\n' +
-            '— создавать и вести разовые мероприятия\n' +
-            '— записываться на услуги по свободным слотам\n\n' +
-            'Навигация:\n' +
-            '— используйте кнопки под сообщениями\n' +
-            '— для смены режима всегда выходите в главное меню\n\n' +
-            'Если вы не уверены, с чего начать — выберите подходящий раздел в главном меню.';
+            'Бот помогает выбрать и переключать рабочие пространства.\n\n' +
+            'Правила:\n' +
+            '— все сущности системы существуют только внутри рабочего пространства;\n' +
+            '— у пользователя всегда может быть выбрано только одно активное рабочее пространство;\n' +
+            '— без выбранного рабочего пространства любые действия, кроме выбора/создания рабочего пространства, запрещены.';
 
         await this.safeReply(ctx, text);
     }
@@ -204,7 +209,6 @@ export class BotFlowDispatcher {
     private isAnyUserMessage(ctx: any): boolean {
         return Boolean(ctx.message);
     }
-
     private isCommand(ctx: any, command: string): boolean {
         const text = ctx.message?.text as string | undefined;
         if (!text) return false;
@@ -215,51 +219,19 @@ export class BotFlowDispatcher {
         return false;
     }
 
-    private async resolveWorkspaceId(params: { ctx: any; telegramUserId: string; telegramChatId: string }): Promise<string | null> {
-        const { ctx, telegramUserId, telegramChatId } = params;
-
-        if (ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup') {
-            const tgGroup = await this.prisma.telegramGroup.findUnique({
-                where: { telegramChatId },
-                select: { workspaceId: true },
-            });
-            return tgGroup?.workspaceId ?? null;
-        }
-
-        if (ctx.chat?.type !== 'private') {
+    private buildWebAppUrl(params: { userId: string; activeWorkspaceId: string }): string | null {
+        const webappHost = this.configService.get<string>('WEBAPP_HOST');
+        if (!webappHost) {
+            this.logger.warn('Переменная WEBAPP_HOST не задана. Кнопка Web App будет скрыта.');
             return null;
         }
 
-        const user = await this.userService.findByTelegramId(telegramUserId);
-        if (!user) {
-            return null;
-        }
+        const trimmedWebappHost = webappHost.trim().replace(/\/+$/, '');
+        const webappBaseUrl =
+            trimmedWebappHost.startsWith('http://') || trimmedWebappHost.startsWith('https://')
+                ? trimmedWebappHost
+                : `https://${trimmedWebappHost}`;
 
-        const memberships = await this.prisma.workspaceMember.findMany({
-            where: { userId: user.id },
-            select: { workspaceId: true },
-            orderBy: { createdAt: 'asc' },
-        });
-
-        if (memberships.length === 0) {
-            const result = await this.workspaceService.onboardFromTelegram({
-                telegramId: telegramUserId,
-                firstName: ctx.from?.first_name ?? null,
-            });
-
-            const createdWorkspaceId = (result as any).workspaceId as string | undefined;
-            if (createdWorkspaceId) {
-                return createdWorkspaceId;
-            }
-
-            const membershipAfter = await this.prisma.workspaceMember.findFirst({
-                where: { userId: user.id },
-                select: { workspaceId: true },
-                orderBy: { createdAt: 'asc' },
-            });
-            return membershipAfter?.workspaceId ?? null;
-        }
-
-        return memberships[0].workspaceId;
+        return `${webappBaseUrl}/?userId=${params.userId}&apiBaseUrl=${encodeURIComponent(webappBaseUrl)}&activeWorkspaceId=${params.activeWorkspaceId}`;
     }
 }

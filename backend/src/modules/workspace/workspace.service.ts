@@ -19,7 +19,7 @@ export class WorkspaceService {
             where: { id: tgGroup.workspaceId },
             select: {
                 id: true,
-                name: true,
+                title: true,
                 createdAt: true,
                 _count: {
                     select: {
@@ -41,7 +41,7 @@ export class WorkspaceService {
             ok: true as const,
             workspace: {
                 id: workspace.id,
-                name: workspace.name,
+                name: workspace.title,
                 createdAt: workspace.createdAt,
                 membersCount: workspace._count.members,
                 telegramGroupsCount: workspace._count.telegramGroups,
@@ -82,7 +82,7 @@ export class WorkspaceService {
                 ok: true as const,
                 registered: true as const,
                 isMember: false as const,
-                workspaceName: workspace.name,
+                workspaceName: workspace.title,
             };
         }
 
@@ -91,7 +91,7 @@ export class WorkspaceService {
             registered: true as const,
             isMember: true as const,
             role: membership.role,
-            workspaceName: workspace.name,
+            workspaceName: workspace.title,
         };
     }
 
@@ -114,12 +114,12 @@ export class WorkspaceService {
                 return { created: false as const, userId: user.id };
             }
 
-            const workspaceName = firstName ? `Рабочее пространство ${firstName}` : 'Моё рабочее пространство';
+            const workspaceTitle = firstName ? `Рабочее пространство ${firstName}` : 'Моё рабочее пространство';
 
             const workspace = await tx.workspace.create({
                 data: {
-                    name: workspaceName,
-                    ownerId: user.id,
+                    title: workspaceTitle,
+                    createdByUserId: user.id,
                 },
             });
 
@@ -131,7 +131,7 @@ export class WorkspaceService {
                 },
             });
 
-            return { created: true as const, userId: user.id, workspaceId: workspace.id, workspaceName };
+            return { created: true as const, userId: user.id, workspaceId: workspace.id, workspaceName: workspaceTitle };
         });
     }
 
@@ -187,12 +187,12 @@ export class WorkspaceService {
         });
     }
 
-    async createWorkspace(ownerId: string, name: string) {
+    async createWorkspace(ownerId: string, title: string) {
         return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const workspace = await tx.workspace.create({
                 data: {
-                    name,
-                    ownerId,
+                    title,
+                    createdByUserId: ownerId,
                 },
             });
 
@@ -210,7 +210,36 @@ export class WorkspaceService {
 
     async findUserOwnedWorkspace(ownerId: string) {
         return this.prisma.workspace.findFirst({
-            where: { ownerId },
+            where: { createdByUserId: ownerId },
+        });
+    }
+
+    async getUserMemberships(userId: string) {
+        return this.prisma.workspaceMember.findMany({
+            where: { userId },
+            include: { workspace: true },
+            orderBy: { createdAt: 'asc' },
+        });
+    }
+
+    async ensureUserMembershipInWorkspace(params: { userId: string; workspaceId: string }) {
+        const membership = await this.prisma.workspaceMember.findUnique({
+            where: {
+                userId_workspaceId: {
+                    userId: params.userId,
+                    workspaceId: params.workspaceId,
+                },
+            },
+            include: { workspace: true },
+        });
+
+        return membership;
+    }
+
+    async updateWorkspaceTitle(params: { workspaceId: string; title: string }) {
+        return this.prisma.workspace.update({
+            where: { id: params.workspaceId },
+            data: { title: params.title },
         });
     }
 }
