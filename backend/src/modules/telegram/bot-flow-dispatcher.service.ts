@@ -244,7 +244,9 @@ export class BotFlowDispatcher {
                 ? trimmedWebappHost
                 : `https://${trimmedWebappHost}`;
 
-        return `${webappBaseUrl}/?userId=${params.userId}&apiBaseUrl=${encodeURIComponent(webappBaseUrl)}&activeWorkspaceId=${params.activeWorkspaceId}`;
+        const apiBaseUrl = this.configService.get<string>('API_BASE_URL')?.trim().replace(/\/+$/, '') ?? webappBaseUrl;
+
+        return `${webappBaseUrl}/?userId=${params.userId}&apiBaseUrl=${encodeURIComponent(apiBaseUrl)}&activeWorkspaceId=${params.activeWorkspaceId}`;
     }
 
     private buildPendingKey(userId: string, chatId?: string | null): string | null {
