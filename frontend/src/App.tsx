@@ -68,9 +68,11 @@ function useTelegramTheme() {
 const App: React.FC = () => {
     useTelegramTheme();
 
-    const search = new URLSearchParams(window.location.search);
-    const apiBaseUrl = (search.get('apiBaseUrl') || '').replace(/\/$/, '');
-    const userId = search.get('userId') || '';
+    const [queryParams] = useState(() => new URLSearchParams(window.location.search));
+    const apiBaseUrl = (queryParams.get('apiBaseUrl') || '').replace(/\/$/, '');
+    const userId = queryParams.get('userId') || '';
+    const queryString = queryParams.toString();
+    const querySuffix = queryString ? `?${queryString}` : '';
 
     const [path, setPath] = useState(window.location.pathname);
     const [loading, setLoading] = useState(true);
@@ -81,10 +83,10 @@ const App: React.FC = () => {
 
     const navigate = useCallback((nextPath: string) => {
         if (window.location.pathname !== nextPath) {
-            window.history.replaceState(null, '', nextPath);
+            window.history.replaceState(null, '', `${nextPath}${querySuffix}`);
             setPath(nextPath);
         }
-    }, []);
+    }, [querySuffix]);
 
     const loadMe = useCallback(async () => {
         try {
