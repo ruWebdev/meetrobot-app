@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { AuthContext } from '../auth/auth.context';
 import { ActiveWorkspaceGuard, UserGuard } from '../auth/auth.guard';
 import { WorkspaceService } from './workspace.service';
@@ -48,16 +48,14 @@ export class WorkspaceController {
 
         const title = (body.title ?? '').trim();
         if (!title) {
-            throw new ForbiddenException('Название рабочего пространства не может быть пустым');
+            throw new BadRequestException('Название рабочего пространства не может быть пустым');
         }
 
         const workspace = await this.workspaceService.createWorkspace(userId, title);
-        await this.userService.setActiveWorkspace(userId, workspace.id);
 
         return {
             id: workspace.id,
             title: workspace.title,
-            createdAt: workspace.createdAt,
             role: 'OWNER',
         };
     }

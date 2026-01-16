@@ -7,6 +7,7 @@ import { UserService } from '../user/user.service';
 @Injectable()
 export class BotFlowDispatcher {
     private readonly logger = new Logger(BotFlowDispatcher.name);
+    private readonly pendingWorkspaceCreation = new Map<string, boolean>();
 
     constructor(
         private readonly userService: UserService,
@@ -47,17 +48,25 @@ export class BotFlowDispatcher {
         const isHelp = this.isCommand(ctx, 'help');
 
         if (isHelp) {
+            this.clearPendingWorkspaceCreation(user.id, ctx.chat?.id?.toString());
             await this.showHelp(ctx);
             return;
         }
 
         if (isStart) {
+            this.clearPendingWorkspaceCreation(user.id, ctx.chat?.id?.toString());
             await this.showWorkspaceEntry(ctx, user.id);
             return;
         }
 
         // Любое другое сообщение в личке ведёт к экрану выбора/создания Workspace
         if (this.isAnyUserMessage(ctx)) {
+            const pendingKey = this.buildPendingKey(user.id, ctx.chat?.id?.toString());
+            if (pendingKey && this.pendingWorkspaceCreation.has(pendingKey)) {
+                await this.handleWorkspaceTitleInput(ctx, user.id, pendingKey);
+                return;
+            }
+
             await this.showWorkspaceEntry(ctx, user.id);
         }
     }
@@ -130,17 +139,20 @@ export class BotFlowDispatcher {
         if (callbackData === 'ws:create') {
             await ctx.answerCallbackQuery({ text: 'Создание рабочего пространства', show_alert: false });
 
-            const title = 'Моё рабочее пространство';
-            const workspace = await this.workspaceService.createWorkspace(userId, title);
-            await this.userService.setActiveWorkspace(userId, workspace.id);
+            const memberships = await this.workspaceService.getUserMemberships(userId);
+            if (memberships.length > 0) {
+                await this.showWorkspaceEntry(ctx, userId);
+                return;
+            }
 
-            await this.safeReply(ctx, `Создано рабочее пространство: ${workspace.title}`);
-            await this.showWorkspaceHome(ctx, {
-                userId,
-                workspaceId: workspace.id,
-                title: workspace.title,
-                role: 'OWNER',
-            });
+            const pendingKey = this.buildPendingKey(userId, ctx.chat?.id?.toString());
+            if (!pendingKey) {
+                await this.safeReply(ctx, 'Не удалось продолжить создание рабочего пространства. Попробуйте позже.');
+                return;
+            }
+
+            this.pendingWorkspaceCreation.set(pendingKey, true);
+            await this.safeReply(ctx, 'Введите название рабочего пространства.');
             return;
         }
 
@@ -233,5 +245,40 @@ export class BotFlowDispatcher {
                 : `https://${trimmedWebappHost}`;
 
         return `${webappBaseUrl}/?userId=${params.userId}&apiBaseUrl=${encodeURIComponent(webappBaseUrl)}&activeWorkspaceId=${params.activeWorkspaceId}`;
+    }
+
+    private buildPendingKey(userId: string, chatId?: string | null): string | null {
+        if (!chatId) return null;
+        return `${userId}:${chatId}`;
+    }
+
+    private clearPendingWorkspaceCreation(userId: string, chatId?: string | null): void {
+        const key = this.buildPendingKey(userId, chatId);
+        if (!key) return;
+        this.pendingWorkspaceCreation.delete(key);
+    }
+
+    private async handleWorkspaceTitleInput(ctx: any, userId: string, pendingKey: string): Promise<void> {
+        const title = (ctx.message?.text ?? '').trim();
+        if (!title) {
+            await this.safeReply(ctx, 'Название не может быть пустым. Введите другое название.');
+            return;
+        }
+
+        try {
+            const workspace = await this.workspaceService.createWorkspace(userId, title);
+            this.pendingWorkspaceCreation.delete(pendingKey);
+
+            await this.safeReply(ctx, `Создано рабочее пространство: ${workspace.title}`);
+            await this.showWorkspaceHome(ctx, {
+                userId,
+                workspaceId: workspace.id,
+                title: workspace.title,
+                role: 'OWNER',
+            });
+        } catch (error) {
+            this.logger.error('Ошибка при создании рабочего пространства', error as any);
+            await this.safeReply(ctx, 'Не удалось создать рабочее пространство. Попробуйте позже.');
+        }
     }
 }

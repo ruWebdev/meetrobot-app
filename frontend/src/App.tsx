@@ -14,6 +14,7 @@ type MeResponse = {
         createdAt: string;
         role: string;
     } | null;
+    workspaces: WorkspaceDto[];
 };
 
 type WorkspaceDto = {
@@ -96,27 +97,13 @@ const App: React.FC = () => {
                 path: '/me',
             });
             setMe(meResp);
+            setWorkspaces(meResp.workspaces ?? []);
             return meResp;
         } catch (e: any) {
             setError(e?.message || 'Неизвестная ошибка');
             return null;
         } finally {
             setLoading(false);
-        }
-    }, [apiBaseUrl, userId]);
-
-    const loadWorkspaces = useCallback(async () => {
-        try {
-            const ws = await apiRequest<WorkspaceDto[]>({
-                apiBaseUrl,
-                userId,
-                path: '/workspaces',
-            });
-            setWorkspaces(ws);
-            return ws;
-        } catch (e: any) {
-            setError(e?.message || 'Неизвестная ошибка');
-            return [] as WorkspaceDto[];
         }
     }, [apiBaseUrl, userId]);
 
@@ -143,7 +130,6 @@ const App: React.FC = () => {
         }
 
         if (path === '/workspaces') {
-            void loadWorkspaces();
             return;
         }
 
@@ -156,7 +142,7 @@ const App: React.FC = () => {
         }
 
         navigate('/');
-    }, [path, me, navigate, loadWorkspaces]);
+    }, [path, me, navigate]);
 
     const handleSelect = useCallback(async (workspaceId: string) => {
         try {
@@ -170,7 +156,6 @@ const App: React.FC = () => {
             });
 
             const meResp = await loadMe();
-            await loadWorkspaces();
             if (meResp?.activeWorkspace?.id) {
                 navigate(`/workspaces/${meResp.activeWorkspace.id}`);
             } else {
@@ -181,7 +166,7 @@ const App: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [apiBaseUrl, userId, loadMe, loadWorkspaces, navigate]);
+    }, [apiBaseUrl, userId, loadMe, navigate]);
 
     const handleCreate = useCallback(async () => {
         const title = newTitle.trim();
@@ -200,7 +185,6 @@ const App: React.FC = () => {
 
             setNewTitle('');
             const meResp = await loadMe();
-            await loadWorkspaces();
             if (meResp?.activeWorkspace?.id) {
                 navigate(`/workspaces/${meResp.activeWorkspace.id}`);
             }
@@ -209,7 +193,7 @@ const App: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [apiBaseUrl, userId, newTitle, loadMe, loadWorkspaces, navigate]);
+    }, [apiBaseUrl, userId, newTitle, loadMe, navigate]);
 
     if (path === '/') {
         return null;

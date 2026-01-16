@@ -204,6 +204,11 @@ export class WorkspaceService {
                 },
             });
 
+            await tx.user.update({
+                where: { id: ownerId },
+                data: { activeWorkspaceId: workspace.id },
+            });
+
             return workspace;
         });
     }

@@ -51,6 +51,12 @@ export class UserController {
             }
         }
 
+        const memberships = await this.prisma.workspaceMember.findMany({
+            where: { userId: user.id },
+            include: { workspace: true },
+            orderBy: { createdAt: 'asc' },
+        });
+
         return {
             id: user.id,
             telegramId: user.telegramId,
@@ -59,6 +65,12 @@ export class UserController {
             username: user.username,
             createdAt: user.createdAt,
             activeWorkspace,
+            workspaces: memberships.map((m) => ({
+                id: m.workspace.id,
+                title: m.workspace.title,
+                createdAt: m.workspace.createdAt,
+                role: m.role,
+            })),
         };
     }
 }
