@@ -103,7 +103,7 @@ const App: React.FC = () => {
             return meResp;
         } catch (e: any) {
             setError(e?.message || 'Неизвестная ошибка');
-            return null;
+            console.error('Load me error:', e);
         } finally {
             setLoading(false);
         }
@@ -165,6 +165,7 @@ const App: React.FC = () => {
             }
         } catch (e: any) {
             setError(e?.message || 'Не удалось выбрать рабочее пространство');
+            console.error('Select workspace error:', e);
         } finally {
             setLoading(false);
         }
@@ -192,6 +193,7 @@ const App: React.FC = () => {
             }
         } catch (e: any) {
             setError(e?.message || 'Не удалось создать рабочее пространство');
+            console.error('Create workspace error:', e);
         } finally {
             setLoading(false);
         }
