@@ -157,9 +157,9 @@ let EventSeriesFlow = EventSeriesFlow_1 = class EventSeriesFlow {
             await ctx.reply('Вы не состоите в этом рабочем пространстве', { reply_markup: (0, flow_keyboards_1.buildExitKeyboard)() });
             return;
         }
-        if (membership.role !== 'OWNER') {
-            this.logger.log(`[Telegram] Deny open WebApp (not OWNER) for user ${user.id}, workspace ${workspaceId}`);
-            await ctx.reply('Только владелец рабочего пространства может создавать события', { reply_markup: (0, flow_keyboards_1.buildExitKeyboard)() });
+        if (!['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+            this.logger.log(`[Telegram] Deny open WebApp (insufficient role) for user ${user.id}, workspace ${workspaceId}`);
+            await ctx.reply('Недостаточно прав для создания события', { reply_markup: (0, flow_keyboards_1.buildExitKeyboard)() });
             return;
         }
         const webappHost = this.configService.get('WEBAPP_HOST');
@@ -171,7 +171,8 @@ let EventSeriesFlow = EventSeriesFlow_1 = class EventSeriesFlow {
         const webappBaseUrl = trimmedWebappHost.startsWith('http://') || trimmedWebappHost.startsWith('https://')
             ? trimmedWebappHost
             : `https://${trimmedWebappHost}`;
-        const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}&apiBaseUrl=${encodeURIComponent(webappBaseUrl)}`;
+        const apiBaseUrl = this.configService.get('API_BASE_URL')?.trim().replace(/\/+$/, '') ?? webappBaseUrl;
+        const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}&apiBaseUrl=${encodeURIComponent(apiBaseUrl)}`;
         const keyboard = new grammy_1.InlineKeyboard().webApp('Создать событие', url);
         if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
             const fromId = ctx.from?.id;

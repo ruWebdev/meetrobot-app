@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventReminderScheduler } from './event-reminder.scheduler';
@@ -10,7 +10,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     imports: [
         ConfigModule,
         PrismaModule,
-        TelegramModule,
+        forwardRef(() => TelegramModule),
         BullModule.forRootAsync({
             imports: [ConfigModule],
             inject: [ConfigService],

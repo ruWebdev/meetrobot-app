@@ -9,11 +9,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkspaceModule = void 0;
 const common_1 = require("@nestjs/common");
 const workspace_service_1 = require("./workspace.service");
+const workspace_controller_1 = require("./workspace.controller");
+const user_module_1 = require("../user/user.module");
 let WorkspaceModule = class WorkspaceModule {
 };
 exports.WorkspaceModule = WorkspaceModule;
 exports.WorkspaceModule = WorkspaceModule = __decorate([
     (0, common_1.Module)({
+        imports: [user_module_1.UserModule],
+        controllers: [workspace_controller_1.WorkspaceController],
         providers: [workspace_service_1.WorkspaceService],
         exports: [workspace_service_1.WorkspaceService],
     })

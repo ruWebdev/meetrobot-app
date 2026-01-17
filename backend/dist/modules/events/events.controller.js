@@ -16,20 +16,12 @@ exports.EventsController = void 0;
 const common_1 = require("@nestjs/common");
 const events_service_1 = require("./events.service");
 const create_event_dto_1 = require("./dto/create-event.dto");
-const update_event_dto_1 = require("./dto/update-event.dto");
+const invite_participants_dto_1 = require("./dto/invite-participants.dto");
+const respond_event_dto_1 = require("./dto/respond-event.dto");
 let EventsController = class EventsController {
     eventsService;
     constructor(eventsService) {
         this.eventsService = eventsService;
-    }
-    async getEvent(eventId, userId) {
-        if (!userId) {
-            throw new common_1.UnauthorizedException('Отсутствует заголовок x-user-id');
-        }
-        return this.eventsService.getEventForEdit({
-            userId,
-            eventId,
-        });
     }
     async createEvent(userId, dto) {
         if (!userId) {
@@ -40,38 +32,49 @@ let EventsController = class EventsController {
             dto,
         });
     }
-    async updateEvent(eventId, userId, dto) {
+    async inviteParticipants(eventId, userId, dto) {
         if (!userId) {
             throw new common_1.UnauthorizedException('Отсутствует заголовок x-user-id');
         }
-        if (!dto || Object.keys(dto).length === 0) {
-            throw new common_1.BadRequestException('Payload не может быть пустым');
+        if (!dto || !dto.participantIds || dto.participantIds.length === 0) {
+            throw new common_1.BadRequestException('Список участников не может быть пустым');
         }
-        return this.eventsService.updateEvent({
+        return this.eventsService.inviteParticipants({
             userId,
             eventId,
-            dto,
+            participantIds: dto.participantIds,
         });
     }
-    async deleteEvent(eventId, userId) {
+    async respondToEvent(eventId, userId, dto) {
         if (!userId) {
             throw new common_1.UnauthorizedException('Отсутствует заголовок x-user-id');
         }
-        return this.eventsService.deleteEvent({
+        return this.eventsService.respondToEvent({
+            userId,
+            eventId,
+            status: dto.status,
+        });
+    }
+    async cancelEvent(eventId, userId) {
+        if (!userId) {
+            throw new common_1.UnauthorizedException('Отсутствует заголовок x-user-id');
+        }
+        return this.eventsService.cancelEvent({
+            userId,
+            eventId,
+        });
+    }
+    async getEventDetails(eventId, userId) {
+        if (!userId) {
+            throw new common_1.UnauthorizedException('Отсутствует заголовок x-user-id');
+        }
+        return this.eventsService.getEventDetails({
             userId,
             eventId,
         });
     }
 };
 exports.EventsController = EventsController;
-__decorate([
-    (0, common_1.Get)(':eventId'),
-    __param(0, (0, common_1.Param)('eventId')),
-    __param(1, (0, common_1.Headers)('x-user-id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
-    __metadata("design:returntype", Promise)
-], EventsController.prototype, "getEvent", null);
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Headers)('x-user-id')),
@@ -81,22 +84,39 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], EventsController.prototype, "createEvent", null);
 __decorate([
-    (0, common_1.Patch)(':eventId'),
+    (0, common_1.Post)(':eventId/invite'),
     __param(0, (0, common_1.Param)('eventId')),
     __param(1, (0, common_1.Headers)('x-user-id')),
     __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, update_event_dto_1.UpdateEventDto]),
+    __metadata("design:paramtypes", [String, String, invite_participants_dto_1.InviteParticipantsDto]),
     __metadata("design:returntype", Promise)
-], EventsController.prototype, "updateEvent", null);
+], EventsController.prototype, "inviteParticipants", null);
 __decorate([
-    (0, common_1.Delete)(':eventId'),
+    (0, common_1.Post)(':eventId/respond'),
+    __param(0, (0, common_1.Param)('eventId')),
+    __param(1, (0, common_1.Headers)('x-user-id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, respond_event_dto_1.RespondEventDto]),
+    __metadata("design:returntype", Promise)
+], EventsController.prototype, "respondToEvent", null);
+__decorate([
+    (0, common_1.Post)(':eventId/cancel'),
     __param(0, (0, common_1.Param)('eventId')),
     __param(1, (0, common_1.Headers)('x-user-id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
-], EventsController.prototype, "deleteEvent", null);
+], EventsController.prototype, "cancelEvent", null);
+__decorate([
+    (0, common_1.Get)(':eventId'),
+    __param(0, (0, common_1.Param)('eventId')),
+    __param(1, (0, common_1.Headers)('x-user-id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], EventsController.prototype, "getEventDetails", null);
 exports.EventsController = EventsController = __decorate([
     (0, common_1.Controller)('events'),
     __metadata("design:paramtypes", [events_service_1.EventsService])

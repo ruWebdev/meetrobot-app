@@ -9,13 +9,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthModule = void 0;
 const common_1 = require("@nestjs/common");
 const auth_context_1 = require("./auth.context");
+const prisma_module_1 = require("../../infra/prisma/prisma.module");
+const auth_guard_1 = require("./auth.guard");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
 exports.AuthModule = AuthModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
-        providers: [auth_context_1.AuthContext],
-        exports: [auth_context_1.AuthContext],
+        imports: [prisma_module_1.PrismaModule],
+        providers: [auth_context_1.AuthContext, auth_guard_1.UserGuard, auth_guard_1.ActiveWorkspaceGuard],
+        exports: [auth_context_1.AuthContext, auth_guard_1.UserGuard, auth_guard_1.ActiveWorkspaceGuard],
     })
 ], AuthModule);

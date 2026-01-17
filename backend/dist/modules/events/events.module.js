@@ -18,7 +18,7 @@ let EventsModule = class EventsModule {
 exports.EventsModule = EventsModule;
 exports.EventsModule = EventsModule = __decorate([
     (0, common_1.Module)({
-        imports: [workspace_module_1.WorkspaceModule, queue_module_1.QueueModule, telegram_module_1.TelegramModule],
+        imports: [workspace_module_1.WorkspaceModule, queue_module_1.QueueModule, (0, common_1.forwardRef)(() => telegram_module_1.TelegramModule)],
         controllers: [events_controller_1.EventsController],
         providers: [events_service_1.EventsService],
         exports: [events_service_1.EventsService],

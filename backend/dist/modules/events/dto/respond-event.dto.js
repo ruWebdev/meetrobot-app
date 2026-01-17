@@ -9,35 +9,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateEventDto = void 0;
+exports.RespondEventDto = void 0;
 const class_validator_1 = require("class-validator");
-class CreateEventDto {
-    workspaceId;
-    title;
-    description;
-    startAt;
-    endAt;
+class RespondEventDto {
+    status;
 }
-exports.CreateEventDto = CreateEventDto;
+exports.RespondEventDto = RespondEventDto;
 __decorate([
-    (0, class_validator_1.IsUUID)(),
+    (0, class_validator_1.IsIn)(['invited', 'confirmed', 'declined', 'tentative']),
     __metadata("design:type", String)
-], CreateEventDto.prototype, "workspaceId", void 0);
-__decorate([
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    __metadata("design:type", String)
-], CreateEventDto.prototype, "title", void 0);
-__decorate([
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], CreateEventDto.prototype, "description", void 0);
-__decorate([
-    (0, class_validator_1.IsDateString)(),
-    __metadata("design:type", String)
-], CreateEventDto.prototype, "startAt", void 0);
-__decorate([
-    (0, class_validator_1.IsDateString)(),
-    __metadata("design:type", String)
-], CreateEventDto.prototype, "endAt", void 0);
+], RespondEventDto.prototype, "status", void 0);

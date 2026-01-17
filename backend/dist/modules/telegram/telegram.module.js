@@ -16,26 +16,19 @@ const redis_module_1 = require("../../infra/redis/redis.module");
 const prisma_module_1 = require("../../infra/prisma/prisma.module");
 const user_session_service_1 = require("./user-session.service");
 const bot_flow_dispatcher_service_1 = require("./bot-flow-dispatcher.service");
-const event_series_flow_1 = require("./flows/event-series.flow");
-const single_event_flow_1 = require("./flows/single-event.flow");
-const service_booking_flow_1 = require("./flows/service-booking.flow");
-const telegram_notification_service_1 = require("../../telegram/telegram-notification.service");
+const events_module_1 = require("../events/events.module");
 let TelegramModule = class TelegramModule {
 };
 exports.TelegramModule = TelegramModule;
 exports.TelegramModule = TelegramModule = __decorate([
     (0, common_1.Module)({
-        imports: [user_module_1.UserModule, workspace_module_1.WorkspaceModule, prisma_module_1.PrismaModule, redis_module_1.RedisModule],
+        imports: [user_module_1.UserModule, workspace_module_1.WorkspaceModule, prisma_module_1.PrismaModule, redis_module_1.RedisModule, (0, common_1.forwardRef)(() => events_module_1.EventsModule)],
         controllers: [telegram_controller_1.TelegramController],
         providers: [
             telegram_service_1.TelegramService,
             user_session_service_1.UserSessionService,
             bot_flow_dispatcher_service_1.BotFlowDispatcher,
-            event_series_flow_1.EventSeriesFlow,
-            single_event_flow_1.SingleEventFlow,
-            service_booking_flow_1.ServiceBookingFlow,
-            telegram_notification_service_1.TelegramNotificationService,
         ],
-        exports: [telegram_service_1.TelegramService, telegram_notification_service_1.TelegramNotificationService],
+        exports: [telegram_service_1.TelegramService],
     })
 ], TelegramModule);

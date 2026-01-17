@@ -24,7 +24,7 @@ let EventReminderScheduler = EventReminderScheduler_1 = class EventReminderSched
         this.queue = queue;
     }
     async scheduleReminderForEvent(params) {
-        const reminderAt = this.computeReminderAt(params.date, params.timeStart);
+        const reminderAt = this.computeReminderAt(params.startAt);
         if (!reminderAt) {
             return;
         }
@@ -34,26 +34,44 @@ let EventReminderScheduler = EventReminderScheduler_1 = class EventReminderSched
         }
         this.logger.log(`[Reminder] Scheduled reminder for event ${params.eventId} at ${reminderAt.toISOString()}`);
         await this.queue.add('remind', { eventId: params.eventId }, {
+            jobId: `remind:${params.eventId}`,
             delay: delayMs,
             attempts: 1,
             removeOnComplete: true,
             removeOnFail: true,
         });
     }
-    computeReminderAt(date, timeStart) {
-        const match = timeStart.match(/^(\d{1,2}):(\d{2})$/);
-        if (!match) {
-            return null;
+    async scheduleCompletionForEvent(params) {
+        const delayMs = params.endAt.getTime() - Date.now();
+        if (delayMs <= 0) {
+            return;
         }
-        const hours = Number(match[1]);
-        const minutes = Number(match[2]);
-        if (Number.isNaN(hours) || Number.isNaN(minutes)) {
-            return null;
-        }
-        const startsAt = new Date(date);
-        startsAt.setHours(hours, minutes, 0, 0);
-        const reminderAt = new Date(startsAt.getTime() - 60 * 60 * 1000);
+        this.logger.log(`[Reminder] Scheduled completion for event ${params.eventId} at ${params.endAt.toISOString()}`);
+        await this.queue.add('complete', { eventId: params.eventId }, {
+            jobId: `complete:${params.eventId}`,
+            delay: delayMs,
+            attempts: 1,
+            removeOnComplete: true,
+            removeOnFail: true,
+        });
+    }
+    async removeScheduledJobs(eventId) {
+        await Promise.all([
+            this.safeRemoveJob(`remind:${eventId}`),
+            this.safeRemoveJob(`complete:${eventId}`),
+        ]);
+    }
+    computeReminderAt(startAt) {
+        const reminderAt = new Date(startAt.getTime() - 60 * 60 * 1000);
         return reminderAt;
+    }
+    async safeRemoveJob(jobId) {
+        try {
+            await this.queue.remove(jobId);
+        }
+        catch (error) {
+            this.logger.warn(`[Reminder] Failed to remove job ${jobId}`, error);
+        }
     }
 };
 exports.EventReminderScheduler = EventReminderScheduler;

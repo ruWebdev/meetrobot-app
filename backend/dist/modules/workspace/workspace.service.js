@@ -29,7 +29,7 @@ let WorkspaceService = class WorkspaceService {
             where: { id: tgGroup.workspaceId },
             select: {
                 id: true,
-                name: true,
+                title: true,
                 createdAt: true,
                 _count: {
                     select: {
@@ -49,7 +49,7 @@ let WorkspaceService = class WorkspaceService {
             ok: true,
             workspace: {
                 id: workspace.id,
-                name: workspace.name,
+                name: workspace.title,
                 createdAt: workspace.createdAt,
                 membersCount: workspace._count.members,
                 telegramGroupsCount: workspace._count.telegramGroups,
@@ -84,7 +84,7 @@ let WorkspaceService = class WorkspaceService {
                 ok: true,
                 registered: true,
                 isMember: false,
-                workspaceName: workspace.name,
+                workspaceName: workspace.title,
             };
         }
         return {
@@ -92,7 +92,7 @@ let WorkspaceService = class WorkspaceService {
             registered: true,
             isMember: true,
             role: membership.role,
-            workspaceName: workspace.name,
+            workspaceName: workspace.title,
         };
     }
     async onboardFromTelegram(params) {
@@ -110,11 +110,11 @@ let WorkspaceService = class WorkspaceService {
             if (existingMembership) {
                 return { created: false, userId: user.id };
             }
-            const workspaceName = firstName ? `Рабочее пространство ${firstName}` : 'Моё рабочее пространство';
+            const workspaceTitle = firstName ? `Рабочее пространство ${firstName}` : 'Моё рабочее пространство';
             const workspace = await tx.workspace.create({
                 data: {
-                    name: workspaceName,
-                    ownerId: user.id,
+                    title: workspaceTitle,
+                    createdByUserId: user.id,
                 },
             });
             await tx.workspaceMember.create({
@@ -124,7 +124,7 @@ let WorkspaceService = class WorkspaceService {
                     role: 'OWNER',
                 },
             });
-            return { created: true, userId: user.id, workspaceId: workspace.id, workspaceName };
+            return { created: true, userId: user.id, workspaceId: workspace.id, workspaceName: workspaceTitle };
         });
     }
     async connectTelegramGroup(params) {
@@ -164,12 +164,12 @@ let WorkspaceService = class WorkspaceService {
             return { ok: true, telegramGroupId: created.id, workspaceId: created.workspaceId };
         });
     }
-    async createWorkspace(ownerId, name) {
+    async createWorkspace(ownerId, title) {
         return this.prisma.$transaction(async (tx) => {
             const workspace = await tx.workspace.create({
                 data: {
-                    name,
-                    ownerId,
+                    title,
+                    createdByUserId: ownerId,
                 },
             });
             await tx.workspaceMember.create({
@@ -179,12 +179,41 @@ let WorkspaceService = class WorkspaceService {
                     role: 'OWNER',
                 },
             });
+            await tx.user.update({
+                where: { id: ownerId },
+                data: { activeWorkspaceId: workspace.id },
+            });
             return workspace;
         });
     }
     async findUserOwnedWorkspace(ownerId) {
         return this.prisma.workspace.findFirst({
-            where: { ownerId },
+            where: { createdByUserId: ownerId },
+        });
+    }
+    async getUserMemberships(userId) {
+        return this.prisma.workspaceMember.findMany({
+            where: { userId },
+            include: { workspace: true },
+            orderBy: { createdAt: 'asc' },
+        });
+    }
+    async ensureUserMembershipInWorkspace(params) {
+        const membership = await this.prisma.workspaceMember.findUnique({
+            where: {
+                userId_workspaceId: {
+                    userId: params.userId,
+                    workspaceId: params.workspaceId,
+                },
+            },
+            include: { workspace: true },
+        });
+        return membership;
+    }
+    async updateWorkspaceTitle(params) {
+        return this.prisma.workspace.update({
+            where: { id: params.workspaceId },
+            data: { title: params.title },
         });
     }
 };

@@ -15,319 +15,281 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infra/prisma/prisma.service");
 const event_reminder_scheduler_1 = require("../../infra/queue/event-reminder.scheduler");
 const telegram_notification_service_1 = require("../../telegram/telegram-notification.service");
+const workspace_service_1 = require("../workspace/workspace.service");
 let EventsService = EventsService_1 = class EventsService {
     prisma;
     telegramNotificationService;
     eventReminderScheduler;
+    workspaceService;
     logger = new common_1.Logger(EventsService_1.name);
-    constructor(prisma, telegramNotificationService, eventReminderScheduler) {
+    participantRoleOrganizer = 'organizer';
+    participantRoleParticipant = 'participant';
+    statusConfirmed = 'confirmed';
+    statusInvited = 'invited';
+    constructor(prisma, telegramNotificationService, eventReminderScheduler, workspaceService) {
         this.prisma = prisma;
         this.telegramNotificationService = telegramNotificationService;
         this.eventReminderScheduler = eventReminderScheduler;
+        this.workspaceService = workspaceService;
     }
     async createEvent(params) {
         const { userId, dto } = params;
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
-            select: { id: true, telegramId: true },
+        const membership = await this.workspaceService.ensureUserMembershipInWorkspace({
+            userId,
+            workspaceId: dto.workspaceId,
         });
-        if (!user) {
-            throw new common_1.NotFoundException('Пользователь не найден');
+        if (!membership) {
+            throw new common_1.ForbiddenException('Вы не состоите в этом рабочем пространстве');
         }
-        const workspace = await this.prisma.workspace.findUnique({
-            where: { id: dto.workspaceId },
-            select: { id: true },
-        });
-        if (!workspace) {
-            throw new common_1.NotFoundException('Workspace не найден');
+        const title = (dto.title ?? '').trim();
+        if (!title) {
+            throw new common_1.BadRequestException('Название события обязательно');
         }
-        const membership = await this.prisma.workspaceMember.findUnique({
-            where: {
-                userId_workspaceId: {
-                    userId: user.id,
-                    workspaceId: dto.workspaceId,
-                },
-            },
-            select: { role: true },
-        });
-        if (!membership || membership.role !== 'OWNER') {
-            throw new common_1.ForbiddenException('Только владелец Workspace может создать событие');
+        const startAt = new Date(dto.startAt);
+        const endAt = new Date(dto.endAt);
+        if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+            throw new common_1.BadRequestException('Некорректный формат даты/времени');
+        }
+        if (endAt <= startAt) {
+            throw new common_1.BadRequestException('Время окончания должно быть позже времени начала');
         }
         const created = await this.prisma.$transaction(async (tx) => {
-            const masterEvent = await tx.event.create({
+            const event = await tx.event.create({
                 data: {
                     workspaceId: dto.workspaceId,
-                    parentEventId: null,
-                    type: 'master',
-                    title: dto.title,
-                    description: dto.description ?? null,
-                    date: new Date(dto.date),
-                    timeStart: dto.timeStart,
-                    timeEnd: dto.timeEnd,
-                    location: dto.location,
-                    status: 'scheduled',
-                    createdById: user.id,
+                    title,
+                    description: dto.description?.trim() ? dto.description.trim() : null,
+                    startAt,
+                    endAt,
+                    status: 'draft',
+                    createdById: userId,
                 },
             });
-            const subEventsPayload = dto.subEvents ?? [];
-            const subEvents = await Promise.all(subEventsPayload.map((se) => tx.event.create({
+            await tx.eventParticipant.create({
                 data: {
-                    workspaceId: dto.workspaceId,
-                    parentEventId: masterEvent.id,
-                    type: 'sub',
-                    title: se.title,
-                    description: null,
-                    date: new Date(se.date),
-                    timeStart: se.timeStart,
-                    timeEnd: se.timeEnd,
-                    location: se.location,
-                    status: 'scheduled',
-                    createdById: user.id,
+                    eventId: event.id,
+                    userId,
+                    role: this.participantRoleOrganizer,
+                    participationStatus: this.statusConfirmed,
+                    invitedAt: new Date(),
+                    respondedAt: new Date(),
                 },
-            })));
-            const members = await tx.workspaceMember.findMany({
-                where: { workspaceId: dto.workspaceId },
-                select: { userId: true, user: { select: { telegramId: true } } },
             });
-            const allEvents = [masterEvent, ...subEvents];
-            for (const ev of allEvents) {
-                await Promise.all(members.map((m) => tx.participation.create({
-                    data: {
-                        eventId: ev.id,
-                        userId: m.userId,
-                        responseStatus: 'pending',
-                        responseUpdatedAt: null,
-                    },
-                })));
-            }
-            return { masterEvent, subEvents, members };
+            return event;
         });
-        try {
-            await this.telegramNotificationService.sendEventCreated(created.masterEvent.id);
-        }
-        catch (error) {
-            this.logger.warn(`[Telegram] Failed to send event card ${created.masterEvent.id}`, error);
-        }
-        try {
-            await this.eventReminderScheduler.scheduleReminderForEvent({
-                eventId: created.masterEvent.id,
-                date: created.masterEvent.date,
-                timeStart: created.masterEvent.timeStart,
-            });
-            await Promise.all(created.subEvents.map((se) => this.eventReminderScheduler.scheduleReminderForEvent({
-                eventId: se.id,
-                date: se.date,
-                timeStart: se.timeStart,
-            })));
-        }
-        catch (error) {
-            this.logger.warn(`[Reminder] Failed to schedule reminders for master event ${created.masterEvent.id}`, error);
-        }
-        return {
-            masterEvent: created.masterEvent,
-            subEvents: created.subEvents,
-        };
+        return created;
     }
-    async getEventForEdit(params) {
-        const { userId, eventId } = params;
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
-            select: { id: true },
-        });
-        if (!user) {
-            throw new common_1.NotFoundException('Пользователь не найден');
-        }
-        const masterEvent = await this.prisma.event.findFirst({
-            where: {
-                id: eventId,
-                type: 'master',
-                deletedAt: null,
-            },
+    async inviteParticipants(params) {
+        const { userId, eventId, participantIds } = params;
+        const event = await this.prisma.event.findUnique({
+            where: { id: eventId },
             select: {
                 id: true,
                 workspaceId: true,
-                title: true,
-                description: true,
-                date: true,
-                timeStart: true,
-                timeEnd: true,
-                location: true,
+                status: true,
+                startAt: true,
+                endAt: true,
             },
         });
-        if (!masterEvent) {
+        if (!event) {
             throw new common_1.NotFoundException('Событие не найдено');
         }
-        const membership = await this.prisma.workspaceMember.findUnique({
+        if (event.status !== 'draft') {
+            throw new common_1.BadRequestException('Приглашения можно отправлять только в статусе draft');
+        }
+        const organizer = await this.prisma.eventParticipant.findUnique({
             where: {
-                userId_workspaceId: {
-                    userId: user.id,
-                    workspaceId: masterEvent.workspaceId,
+                eventId_userId: {
+                    eventId: event.id,
+                    userId,
                 },
             },
             select: { role: true },
         });
-        if (!membership || membership.role !== 'OWNER') {
-            throw new common_1.ForbiddenException('Только владелец Workspace может просматривать событие');
+        if (!organizer || organizer.role !== this.participantRoleOrganizer) {
+            throw new common_1.ForbiddenException('Только организатор может приглашать участников');
         }
-        const subEvents = await this.prisma.event.findMany({
+        const uniqueIds = Array.from(new Set((participantIds ?? []).filter(Boolean)));
+        if (uniqueIds.length === 0) {
+            throw new common_1.BadRequestException('Список участников не может быть пустым');
+        }
+        const workspaceMembers = await this.prisma.workspaceMember.findMany({
             where: {
-                parentEventId: masterEvent.id,
-                deletedAt: null,
+                workspaceId: event.workspaceId,
+                userId: { in: uniqueIds },
             },
-            select: {
-                id: true,
-                title: true,
-                date: true,
-                timeStart: true,
-                timeEnd: true,
-                location: true,
-            },
-            orderBy: [{ date: 'asc' }, { timeStart: 'asc' }],
+            select: { userId: true },
         });
-        return {
-            masterEvent,
-            subEvents,
-        };
-    }
-    async updateEvent(params) {
-        const { userId, eventId, dto } = params;
-        if (!dto || Object.keys(dto).length === 0) {
-            throw new common_1.BadRequestException('Payload не может быть пустым');
+        if (workspaceMembers.length === 0) {
+            throw new common_1.BadRequestException('Выбранные пользователи не состоят в рабочем пространстве');
         }
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
+        const allowedIds = workspaceMembers.map((m) => m.userId);
+        const existing = await this.prisma.eventParticipant.findMany({
+            where: {
+                eventId: event.id,
+                userId: { in: allowedIds },
+            },
+            select: { userId: true },
+        });
+        const existingIds = new Set(existing.map((p) => p.userId));
+        const newIds = allowedIds.filter((id) => !existingIds.has(id));
+        await this.prisma.$transaction(async (tx) => {
+            if (newIds.length > 0) {
+                await tx.eventParticipant.createMany({
+                    data: newIds.map((id) => ({
+                        eventId: event.id,
+                        userId: id,
+                        role: this.participantRoleParticipant,
+                        participationStatus: this.statusInvited,
+                        invitedAt: new Date(),
+                    })),
+                });
+            }
+            await tx.event.update({
+                where: { id: event.id },
+                data: { status: 'scheduled' },
+            });
+        });
+        try {
+            await this.telegramNotificationService.sendEventInvitations(event.id, newIds);
+        }
+        catch (error) {
+            this.logger.warn(`[Telegram] Failed to send invitations for event ${event.id}`, error);
+        }
+        try {
+            await this.eventReminderScheduler.scheduleReminderForEvent({
+                eventId: event.id,
+                startAt: event.startAt,
+            });
+        }
+        catch (error) {
+            this.logger.warn(`[Reminder] Failed to schedule reminder for event ${event.id}`, error);
+        }
+        try {
+            await this.eventReminderScheduler.scheduleCompletionForEvent({
+                eventId: event.id,
+                endAt: event.endAt,
+            });
+        }
+        catch (error) {
+            this.logger.warn(`[Reminder] Failed to schedule completion for event ${event.id}`, error);
+        }
+        return { invited: newIds.length, status: 'scheduled' };
+    }
+    async respondToEvent(params) {
+        const { userId, eventId, status } = params;
+        const event = await this.prisma.event.findUnique({
+            where: { id: eventId },
+            select: { id: true, startAt: true },
+        });
+        if (!event) {
+            throw new common_1.NotFoundException('Событие не найдено');
+        }
+        const eventStartAt = new Date(event.startAt);
+        if (eventStartAt <= new Date()) {
+            throw new common_1.ForbiddenException('Нельзя изменить участие после начала события');
+        }
+        const participant = await this.prisma.eventParticipant.findUnique({
+            where: {
+                eventId_userId: {
+                    eventId: event.id,
+                    userId,
+                },
+            },
+        });
+        if (!participant) {
+            throw new common_1.ForbiddenException('Вы не приглашены на событие');
+        }
+        const updated = await this.prisma.eventParticipant.update({
+            where: { id: participant.id },
+            data: {
+                participationStatus: status,
+                respondedAt: new Date(),
+            },
+        });
+        try {
+            await this.telegramNotificationService.sendParticipationStatusChanged(event.id, userId);
+        }
+        catch (error) {
+            this.logger.warn(`[Telegram] Failed to notify organizer for event ${event.id}`, error);
+        }
+        return updated;
+    }
+    async cancelEvent(params) {
+        const { userId, eventId } = params;
+        const organizer = await this.prisma.eventParticipant.findUnique({
+            where: {
+                eventId_userId: {
+                    eventId,
+                    userId,
+                },
+            },
+            select: { role: true },
+        });
+        if (!organizer || organizer.role !== this.participantRoleOrganizer) {
+            throw new common_1.ForbiddenException('Только организатор может отменить событие');
+        }
+        const updated = await this.prisma.event.update({
+            where: { id: eventId },
+            data: { status: 'cancelled' },
+        });
+        try {
+            await this.eventReminderScheduler.removeScheduledJobs(eventId);
+        }
+        catch (error) {
+            this.logger.warn(`[Reminder] Failed to remove scheduled jobs for event ${eventId}`, error);
+        }
+        try {
+            await this.telegramNotificationService.sendEventCancelled(eventId);
+        }
+        catch (error) {
+            this.logger.warn(`[Telegram] Failed to send cancel notification ${eventId}`, error);
+        }
+        return updated;
+    }
+    async getEventDetails(params) {
+        const { userId, eventId } = params;
+        const participant = await this.prisma.eventParticipant.findUnique({
+            where: {
+                eventId_userId: {
+                    eventId,
+                    userId,
+                },
+            },
             select: { id: true },
         });
-        if (!user) {
-            throw new common_1.NotFoundException('Пользователь не найден');
+        if (!participant) {
+            throw new common_1.ForbiddenException('Нет доступа к событию');
         }
-        const existing = await this.prisma.event.findUnique({
+        const event = await this.prisma.event.findUnique({
             where: { id: eventId },
             select: {
                 id: true,
                 workspaceId: true,
                 title: true,
                 description: true,
-                date: true,
-                timeStart: true,
-                timeEnd: true,
-                location: true,
-                deletedAt: true,
+                startAt: true,
+                endAt: true,
+                status: true,
+                createdById: true,
+                createdAt: true,
+                participants: {
+                    select: {
+                        userId: true,
+                        role: true,
+                        participationStatus: true,
+                        invitedAt: true,
+                        respondedAt: true,
+                        user: { select: { firstName: true, lastName: true, username: true } },
+                    },
+                    orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
+                },
             },
         });
-        if (!existing) {
+        if (!event) {
             throw new common_1.NotFoundException('Событие не найдено');
         }
-        if (existing.deletedAt) {
-            throw new common_1.NotFoundException('Событие не найдено');
-        }
-        const membership = await this.prisma.workspaceMember.findUnique({
-            where: {
-                userId_workspaceId: {
-                    userId: user.id,
-                    workspaceId: existing.workspaceId,
-                },
-            },
-            select: { role: true },
-        });
-        if (!membership || membership.role !== 'OWNER') {
-            throw new common_1.ForbiddenException('Только владелец Workspace может обновлять событие');
-        }
-        const newDate = dto.date ? new Date(dto.date) : existing.date;
-        const newTimeStart = dto.timeStart ?? existing.timeStart;
-        const newTimeEnd = dto.timeEnd ?? existing.timeEnd;
-        const newLocation = dto.location ?? existing.location;
-        const significantChanged = (dto.date ? newDate.getTime() !== existing.date.getTime() : false) ||
-            (dto.timeStart ? dto.timeStart !== existing.timeStart : false) ||
-            (dto.timeEnd ? dto.timeEnd !== existing.timeEnd : false) ||
-            (dto.location ? dto.location !== existing.location : false);
-        const updated = await this.prisma.event.update({
-            where: { id: existing.id },
-            data: {
-                title: dto.title ?? undefined,
-                description: dto.description === undefined ? undefined : dto.description,
-                date: dto.date ? newDate : undefined,
-                timeStart: dto.timeStart ?? undefined,
-                timeEnd: dto.timeEnd ?? undefined,
-                location: dto.location ?? undefined,
-            },
-        });
-        this.logger.log(`[Event] Event ${eventId} updated by user ${userId}`);
-        if (significantChanged) {
-            await this.prisma.participation.updateMany({
-                where: { eventId: existing.id },
-                data: {
-                    responseStatus: 'pending',
-                    responseUpdatedAt: null,
-                },
-            });
-            this.logger.log(`[Participation] Reset participation for event ${eventId}`);
-            try {
-                await this.telegramNotificationService.sendEventUpdated(existing.id);
-            }
-            catch (error) {
-                this.logger.warn(`[Telegram] Failed to send event updated notification ${existing.id}`, error);
-            }
-        }
-        return updated;
-    }
-    async deleteEvent(params) {
-        const { userId, eventId } = params;
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
-            select: { id: true },
-        });
-        if (!user) {
-            throw new common_1.NotFoundException('Пользователь не найден');
-        }
-        const masterEvent = await this.prisma.event.findFirst({
-            where: {
-                id: eventId,
-                type: 'master',
-                deletedAt: null,
-            },
-            select: {
-                id: true,
-                workspaceId: true,
-            },
-        });
-        if (!masterEvent) {
-            throw new common_1.NotFoundException('Событие не найдено');
-        }
-        const membership = await this.prisma.workspaceMember.findUnique({
-            where: {
-                userId_workspaceId: {
-                    userId: user.id,
-                    workspaceId: masterEvent.workspaceId,
-                },
-            },
-            select: { role: true },
-        });
-        if (!membership || membership.role !== 'OWNER') {
-            throw new common_1.ForbiddenException('Только владелец Workspace может удалить событие');
-        }
-        const now = new Date();
-        await this.prisma.$transaction(async (tx) => {
-            await tx.event.updateMany({
-                where: {
-                    OR: [
-                        { id: masterEvent.id },
-                        { parentEventId: masterEvent.id },
-                    ],
-                    deletedAt: null,
-                },
-                data: {
-                    deletedAt: now,
-                },
-            });
-        });
-        try {
-            await this.telegramNotificationService.sendEventCancelled(masterEvent.id);
-        }
-        catch (error) {
-            this.logger.warn(`[Telegram] Failed to send event cancelled notification ${masterEvent.id}`, error);
-        }
-        return { ok: true };
+        return event;
     }
 };
 exports.EventsService = EventsService;
@@ -335,5 +297,6 @@ exports.EventsService = EventsService = EventsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         telegram_notification_service_1.TelegramNotificationService,
-        event_reminder_scheduler_1.EventReminderScheduler])
+        event_reminder_scheduler_1.EventReminderScheduler,
+        workspace_service_1.WorkspaceService])
 ], EventsService);
