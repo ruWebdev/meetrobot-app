@@ -81,19 +81,24 @@ export class BotFlowDispatcher {
 
         if (memberships.length === 1) {
             const membership = memberships[0];
+            const workspaceTitle = (membership.workspace as any).title ?? (membership.workspace as any).name ?? 'Рабочее пространство';
             if ((membership.workspace as any).id) {
                 await this.userService.setActiveWorkspace(userId, membership.workspace.id);
             }
             await this.showWorkspaceHome(ctx, {
                 userId,
                 workspaceId: membership.workspace.id,
-                title: membership.workspace.title,
+                title: workspaceTitle,
                 role: membership.role,
             });
             return;
         }
 
-        await this.showWorkspaceSelector(ctx, memberships.map((m) => ({ id: m.workspace.id, title: m.workspace.title, role: m.role })));
+        await this.showWorkspaceSelector(ctx, memberships.map((m) => ({
+            id: m.workspace.id,
+            title: (m.workspace as any).title ?? (m.workspace as any).name ?? 'Рабочее пространство',
+            role: m.role,
+        })));
     }
 
     private async showNoWorkspace(ctx: any): Promise<void> {
@@ -165,7 +170,11 @@ export class BotFlowDispatcher {
                 return;
             }
 
-            await this.showWorkspaceSelector(ctx, memberships.map((m) => ({ id: m.workspace.id, title: m.workspace.title, role: m.role })));
+            await this.showWorkspaceSelector(ctx, memberships.map((m) => ({
+                id: m.workspace.id,
+                title: (m.workspace as any).title ?? (m.workspace as any).name ?? 'Рабочее пространство',
+                role: m.role,
+            })));
             return;
         }
 
@@ -183,7 +192,7 @@ export class BotFlowDispatcher {
             await this.showWorkspaceHome(ctx, {
                 userId,
                 workspaceId: membership.workspace.id,
-                title: membership.workspace.title,
+                title: (membership.workspace as any).title ?? (membership.workspace as any).name ?? 'Рабочее пространство',
                 role: membership.role,
             });
             return;
@@ -271,11 +280,12 @@ export class BotFlowDispatcher {
             const workspace = await this.workspaceService.createWorkspace(userId, title);
             this.pendingWorkspaceCreation.delete(pendingKey);
 
-            await this.safeReply(ctx, `Создано рабочее пространство: ${workspace.title}`);
+            const workspaceTitle = (workspace as any).title ?? (workspace as any).name ?? 'Рабочее пространство';
+            await this.safeReply(ctx, `Создано рабочее пространство: ${workspaceTitle}`);
             await this.showWorkspaceHome(ctx, {
                 userId,
                 workspaceId: workspace.id,
-                title: workspace.title,
+                title: workspaceTitle,
                 role: 'OWNER',
             });
         } catch (error) {

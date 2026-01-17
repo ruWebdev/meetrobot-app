@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
+import CreateEventPage from './pages/CreateEventPage';
 
 type MeResponse = {
     id: string;
@@ -205,7 +206,12 @@ const App: React.FC = () => {
 
     const isWorkspacesRoute = path === '/workspaces';
     const workspaceId = path.startsWith('/workspaces/') ? path.split('/')[2] || '' : '';
+    const isCreateEventRoute = Boolean(workspaceId && path === `/workspaces/${workspaceId}/events/create`);
     const isWorkspaceHome = Boolean(workspaceId && me?.activeWorkspace?.id === workspaceId);
+
+    if (isCreateEventRoute) {
+        return <CreateEventPage workspaceId={workspaceId} />;
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -275,6 +281,12 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                             <div className="mt-4">
+                                <button
+                                    onClick={() => navigate(`/workspaces/${workspaceId}/events/create`)}
+                                    className="mr-3 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                                >
+                                    Создать событие
+                                </button>
                                 <button
                                     onClick={() => navigate('/workspaces')}
                                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"

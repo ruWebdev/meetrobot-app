@@ -1,41 +1,31 @@
-export type CreateSubEventPayload = {
-    title: string;
-    date: string; // YYYY-MM-DD
-    timeStart: string; // HH:mm
-    timeEnd: string; // HH:mm
-    location: string;
+export type EventType = 'single' | 'parent' | 'service';
+
+export type EventSlotPayload = {
+    startTime: string;
+    endTime: string;
+    maxParticipants?: number;
 };
 
 export type CreateEventPayload = {
-    workspaceId: string;
+    type: EventType;
     title: string;
     description?: string;
-    date: string; // YYYY-MM-DD
-    timeStart: string; // HH:mm
-    timeEnd: string; // HH:mm
-    location: string;
-    subEvents?: CreateSubEventPayload[];
-};
-
-export type CreatedEvent = {
-    id: string;
-    workspaceId: string;
-    parentEventId: string | null;
-    type: 'master' | 'sub';
-    title: string;
-    description: string | null;
-    date: string;
-    timeStart: string;
-    timeEnd: string;
-    location: string;
-    status: 'scheduled' | string;
-    createdById: string;
-    createdAt: string;
+    date?: string; // ISO 8601
+    time?: string;
+    location?: string;
+    maxParticipants?: number;
+    mandatoryAttendance?: boolean;
+    slots?: EventSlotPayload[];
+    confirmationMode?: 'auto' | 'manual';
 };
 
 export type CreateEventResponse = {
-    masterEvent: CreatedEvent;
-    subEvents: CreatedEvent[];
+    id: string;
+    workspaceId: string;
+    type: EventType;
+    title: string;
+    status: 'draft' | 'published' | 'completed' | string;
+    createdAt: string;
 };
 
 export type EventForEditResponse = {

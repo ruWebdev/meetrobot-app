@@ -23,12 +23,13 @@ function normalizeErrorMessage(data: any): string {
     }
 }
 
-export async function createEvent(params: {
+export async function createWorkspaceEvent(params: {
     apiBaseUrl: string;
     userId: string;
+    workspaceId: string;
     payload: CreateEventPayload;
 }): Promise<CreateEventResponse> {
-    const resp = await fetch(`${params.apiBaseUrl}/events`, {
+    const resp = await fetch(`${params.apiBaseUrl}/workspace/${params.workspaceId}/event`, {
         method: 'POST',
         headers: {
             'content-type': 'application/json',

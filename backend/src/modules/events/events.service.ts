@@ -4,7 +4,9 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import { EventReminderScheduler } from '../../infra/queue/event-reminder.scheduler';
 import { TelegramNotificationService } from '../../telegram/telegram-notification.service';
 import { CreateEventDto } from './dto/create-event.dto';
+import { CreateWorkspaceEventDto } from './dto/create-workspace-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
+import { WorkspaceService } from '../workspace/workspace.service';
 
 @Injectable()
 export class EventsService {
@@ -14,7 +16,111 @@ export class EventsService {
         private prisma: PrismaService,
         private telegramNotificationService: TelegramNotificationService,
         private eventReminderScheduler: EventReminderScheduler,
+        private workspaceService: WorkspaceService,
     ) { }
+
+    async createWorkspaceEvent(params: { userId: string; workspaceId: string; dto: CreateWorkspaceEventDto }) {
+        const { userId, workspaceId, dto } = params;
+
+        const membership = await this.workspaceService.ensureUserMembershipInWorkspace({
+            userId,
+            workspaceId,
+        });
+
+        if (!membership) {
+            throw new ForbiddenException('Вы не состоите в этом рабочем пространстве');
+        }
+
+        if (!['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+            throw new ForbiddenException('Недостаточно прав для создания события');
+        }
+
+        const title = (dto.title ?? '').trim();
+        if (!title) {
+            throw new BadRequestException('Название события обязательно');
+        }
+
+        const eventType = dto.type;
+        if (!eventType || !['single', 'parent', 'service'].includes(eventType)) {
+            throw new BadRequestException('Некорректный тип события');
+        }
+
+        if ((eventType === 'single' || eventType === 'parent') && !dto.date) {
+            throw new BadRequestException('Дата события обязательна');
+        }
+
+        if (dto.date) {
+            const parsedDate = new Date(dto.date);
+            if (Number.isNaN(parsedDate.getTime())) {
+                throw new BadRequestException('Некорректный формат даты');
+            }
+        }
+
+        if (dto.maxParticipants !== undefined && dto.maxParticipants !== null && dto.maxParticipants <= 0) {
+            throw new BadRequestException('Максимальное число участников должно быть положительным');
+        }
+
+        if (eventType === 'service') {
+            if (!dto.slots || dto.slots.length === 0) {
+                throw new BadRequestException('Добавьте хотя бы один слот');
+            }
+
+            dto.slots.forEach((slot: { startTime: string; endTime: string; maxParticipants?: number }, index: number) => {
+                if (!slot.startTime || !slot.endTime) {
+                    throw new BadRequestException(`Слот #${index + 1}: время начала и окончания обязательны`);
+                }
+
+                const start = new Date(slot.startTime);
+                const end = new Date(slot.endTime);
+                if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+                    throw new BadRequestException(`Слот #${index + 1}: некорректный формат времени`);
+                }
+            });
+        }
+
+        const created = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            const event = await (tx as any).event.create({
+                data: {
+                    workspaceId,
+                    parentEventId: null,
+                    type: eventType,
+                    title,
+                    description: dto.description?.trim() ? dto.description.trim() : null,
+                    location: dto.location?.trim() ? dto.location.trim() : null,
+                    maxParticipants: eventType === 'parent' ? null : dto.maxParticipants ?? null,
+                    mandatoryAttendance: eventType === 'parent' ? dto.mandatoryAttendance ?? false : null,
+                    confirmationMode: eventType === 'service' ? dto.confirmationMode ?? 'auto' : null,
+                    status: 'draft',
+                    createdById: userId,
+                    ...(dto.date ? { date: new Date(dto.date) } : {}),
+                    ...(dto.time ? { time: dto.time } : {}),
+                },
+            });
+
+            if (eventType === 'service' && dto.slots?.length) {
+                const eventSlotClient = (tx as any).eventSlot as { createMany: (args: any) => Promise<any> };
+                await eventSlotClient.createMany({
+                    data: dto.slots.map((slot: { startTime: string; endTime: string; maxParticipants?: number }) => ({
+                        eventId: event.id,
+                        startTime: new Date(slot.startTime),
+                        endTime: new Date(slot.endTime),
+                        maxParticipants: slot.maxParticipants ?? null,
+                    })),
+                });
+            }
+
+            return event;
+        });
+
+        return {
+            id: created.id,
+            type: created.type,
+            title: created.title,
+            status: created.status,
+            createdAt: created.createdAt,
+            workspaceId: created.workspaceId,
+        };
+    }
 
     async createEvent(params: { userId: string; dto: CreateEventDto }) {
         const { userId, dto } = params;
@@ -118,18 +224,23 @@ export class EventsService {
         }
 
         try {
-            await this.eventReminderScheduler.scheduleReminderForEvent({
-                eventId: created.masterEvent.id,
-                date: created.masterEvent.date,
-                timeStart: created.masterEvent.timeStart,
-            });
+            if (created.masterEvent.date && created.masterEvent.timeStart) {
+                await this.eventReminderScheduler.scheduleReminderForEvent({
+                    eventId: created.masterEvent.id,
+                    date: created.masterEvent.date,
+                    timeStart: created.masterEvent.timeStart,
+                });
+            }
 
             await Promise.all(
-                created.subEvents.map((se) => this.eventReminderScheduler.scheduleReminderForEvent({
-                    eventId: se.id,
-                    date: se.date,
-                    timeStart: se.timeStart,
-                })),
+                created.subEvents.map((se) => {
+                    if (!se.date || !se.timeStart) return null;
+                    return this.eventReminderScheduler.scheduleReminderForEvent({
+                        eventId: se.id,
+                        date: se.date,
+                        timeStart: se.timeStart,
+                    });
+                }),
             );
         } catch (error) {
             this.logger.warn(`[Reminder] Failed to schedule reminders for master event ${created.masterEvent.id}`, error as any);
@@ -270,7 +381,7 @@ export class EventsService {
         const newLocation = dto.location ?? existing.location;
 
         const significantChanged =
-            (dto.date ? newDate.getTime() !== existing.date.getTime() : false) ||
+            (dto.date ? (!existing.date || newDate.getTime() !== existing.date.getTime()) : false) ||
             (dto.timeStart ? dto.timeStart !== existing.timeStart : false) ||
             (dto.timeEnd ? dto.timeEnd !== existing.timeEnd : false) ||
             (dto.location ? dto.location !== existing.location : false);

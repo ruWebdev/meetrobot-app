@@ -167,9 +167,9 @@ export class EventSeriesFlow implements FlowHandler {
             return;
         }
 
-        if (membership.role !== 'OWNER') {
-            this.logger.log(`[Telegram] Deny open WebApp (not OWNER) for user ${user.id}, workspace ${workspaceId}`);
-            await ctx.reply('Только владелец рабочего пространства может создавать события', { reply_markup: buildExitKeyboard() });
+        if (!['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+            this.logger.log(`[Telegram] Deny open WebApp (insufficient role) for user ${user.id}, workspace ${workspaceId}`);
+            await ctx.reply('Недостаточно прав для создания события', { reply_markup: buildExitKeyboard() });
             return;
         }
 
@@ -185,7 +185,8 @@ export class EventSeriesFlow implements FlowHandler {
                 ? trimmedWebappHost
                 : `https://${trimmedWebappHost}`;
 
-        const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}&apiBaseUrl=${encodeURIComponent(webappBaseUrl)}`;
+        const apiBaseUrl = this.configService.get<string>('API_BASE_URL')?.trim().replace(/\/+$/, '') ?? webappBaseUrl;
+        const url = `${webappBaseUrl}/workspaces/${workspaceId}/events/create?userId=${user.id}&apiBaseUrl=${encodeURIComponent(apiBaseUrl)}`;
         const keyboard = new InlineKeyboard().webApp('Создать событие', url);
 
         if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
