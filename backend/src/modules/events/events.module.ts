@@ -6,7 +6,7 @@ import { QueueModule } from '../../infra/queue/queue.module';
 import { TelegramModule } from '../telegram/telegram.module';
 
 @Module({
-    imports: [WorkspaceModule, QueueModule, forwardRef(() => TelegramModule)],
+    imports: [WorkspaceModule, forwardRef(() => QueueModule), forwardRef(() => TelegramModule)],
     controllers: [EventsController],
     providers: [EventsService],
     exports: [EventsService],
