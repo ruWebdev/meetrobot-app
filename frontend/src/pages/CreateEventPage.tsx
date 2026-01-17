@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
-import { ApiError, createWorkspaceEvent } from '../api/events.api';
-import { CreateEventPayload, EventSlotPayload, EventType } from '../types/events';
+import { ApiError, createEvent } from '../api/events.api';
+import { CreateEventPayload } from '../types/events';
 
 function getQueryParam(name: string): string | null {
     const url = new URL(window.location.href);
@@ -35,8 +35,15 @@ function errorMessageByStatus(status: number, backendMessage: string): string {
     return backendMessage || `Ошибка ${status}`;
 }
 
-export default function CreateEventPage(props: { workspaceId: string }) {
-    const { workspaceId } = props;
+function toIso(value: string): string | null {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+}
+
+export default function CreateEventPage(props: { workspaceId: string; onNavigate: (path: string) => void }) {
+    const { workspaceId, onNavigate } = props;
 
     const userId = useMemo(() => getUserId(), []);
     const apiBaseUrl = useMemo(() => getQueryParam('apiBaseUrl') ?? 'http://localhost:3000', []);
@@ -46,18 +53,10 @@ export default function CreateEventPage(props: { workspaceId: string }) {
         return value ? `?${value}` : '';
     }, []);
 
-    const [selectedType, setSelectedType] = useState<EventType | null>(null);
-
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [date, setDate] = useState('');
-    const [time, setTime] = useState('');
-    const [location, setLocation] = useState('');
-    const [maxParticipants, setMaxParticipants] = useState('');
-    const [mandatoryAttendance, setMandatoryAttendance] = useState(false);
-    const [confirmationMode, setConfirmationMode] = useState<'auto' | 'manual'>('auto');
-
-    const [slots, setSlots] = useState<Array<EventSlotPayload & { id: string }>>([]);
+    const [startAt, setStartAt] = useState('');
+    const [endAt, setEndAt] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [createdEventId, setCreatedEventId] = useState<string | null>(null);
@@ -71,60 +70,30 @@ export default function CreateEventPage(props: { workspaceId: string }) {
         }
     }, []);
 
-    const canSubmit = Boolean(
-        workspaceId &&
-        userId &&
-        selectedType &&
-        title.trim() &&
-        ((selectedType === 'single' || selectedType === 'parent') ? date : true) &&
-        (selectedType !== 'service' || slots.length > 0),
-    );
-
-    const addSlot = () => {
-        setSlots((prev) => [
-            ...prev,
-            { id: crypto.randomUUID(), startTime: '', endTime: '', maxParticipants: undefined },
-        ]);
-    };
-
-    const updateSlot = (id: string, patch: Partial<EventSlotPayload>) => {
-        setSlots((prev) => prev.map((slot) => (slot.id === id ? { ...slot, ...patch } : slot)));
-    };
-
-    const removeSlot = (id: string) => {
-        setSlots((prev) => prev.filter((slot) => slot.id !== id));
-    };
+    const canSubmit = Boolean(workspaceId && userId && title.trim() && startAt && endAt);
 
     const submit = async () => {
         setError(null);
 
-        if (!selectedType) {
-            setError('Выберите тип события');
+        const startIso = toIso(startAt);
+        const endIso = toIso(endAt);
+
+        if (!startIso || !endIso) {
+            setError('Заполните корректные дату и время начала/окончания');
             return;
         }
 
         const payload: CreateEventPayload = {
-            type: selectedType,
+            workspaceId,
             title: title.trim(),
             description: description.trim() ? description.trim() : undefined,
-            date: date || undefined,
-            time: time || undefined,
-            location: location.trim() ? location.trim() : undefined,
-            maxParticipants: maxParticipants ? Number(maxParticipants) : undefined,
-            mandatoryAttendance: selectedType === 'parent' ? mandatoryAttendance : undefined,
-            slots: selectedType === 'service'
-                ? slots.map(({ id, ...slot }) => ({
-                    startTime: slot.startTime,
-                    endTime: slot.endTime,
-                    maxParticipants: slot.maxParticipants ? Number(slot.maxParticipants) : undefined,
-                }))
-                : undefined,
-            confirmationMode: selectedType === 'service' ? confirmationMode : undefined,
+            startAt: startIso,
+            endAt: endIso,
         };
 
         setIsSubmitting(true);
         try {
-            const result = await createWorkspaceEvent({ apiBaseUrl, userId, workspaceId, payload });
+            const result = await createEvent({ apiBaseUrl, userId, payload });
             setCreatedEventId(result.id);
         } catch (e: any) {
             const apiError = e as ApiError;
@@ -140,257 +109,131 @@ export default function CreateEventPage(props: { workspaceId: string }) {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50 text-slate-900">
-            <div className="mx-auto max-w-3xl p-4 pb-12">
-                <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50 text-slate-900 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:text-slate-100">
+            <div className="mx-auto flex max-w-4xl flex-col gap-6 p-4 pb-12">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
+                        <div className="text-sm uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">Event</div>
                         <h1 className="text-2xl font-semibold">Создание события</h1>
-                        <div className="mt-1 text-sm text-slate-600">
-                            Выберите тип события и заполните нужные поля.
+                        <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                            Заполните основные параметры и создайте событие в статусе draft.
                         </div>
                     </div>
                     <button
                         type="button"
-                        onClick={() => (window.location.href = `/workspaces/${workspaceId}${querySuffix}`)}
-                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+                        onClick={() => onNavigate(`/workspaces/${workspaceId}`)}
+                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
-                        Вернуться в Workspace
+                        Вернуться
                     </button>
                 </div>
 
                 {createdEventId ? (
-                    <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm">
-                        <div className="text-sm font-semibold text-emerald-700">Событие создано</div>
-                        <div className="mt-2 text-lg font-semibold">ID события</div>
-                        <div className="mt-1 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{createdEventId}</div>
-                        <div className="mt-4 text-sm text-slate-600">
-                            Вы можете продолжить работу с событием в списке событий Workspace.
+                    <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm dark:border-emerald-900/40 dark:bg-slate-900">
+                        <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Событие создано</div>
+                        <div className="mt-2 text-lg font-semibold">Черновик готов</div>
+                        <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-200">
+                            {createdEventId}
+                        </div>
+                        <div className="mt-4 text-sm text-slate-600 dark:text-slate-400">
+                            Дальше можно открыть карточку события и посмотреть участников.
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-3">
+                            <button
+                                type="button"
+                                onClick={() => onNavigate(`/workspaces/${workspaceId}/events/${createdEventId}`)}
+                                className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500"
+                            >
+                                Открыть событие
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setCreatedEventId(null)}
+                                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                            >
+                                Создать ещё
+                            </button>
                         </div>
                     </div>
                 ) : (
-                    <div className="space-y-6">
-                        <div className="grid gap-4 md:grid-cols-3">
-                            {[
-                                {
-                                    type: 'single' as const,
-                                    title: 'Единичное событие',
-                                    hint: 'Одно событие без вложенной структуры.',
-                                },
-                                {
-                                    type: 'parent' as const,
-                                    title: 'Событие с подсобытиями',
-                                    hint: 'Группа связанных событий с опцией обязательного участия.',
-                                },
-                                {
-                                    type: 'service' as const,
-                                    title: 'Запись на услугу',
-                                    hint: 'Запись по слотам с подтверждением и лимитами.',
-                                },
-                            ].map((item) => (
-                                <button
-                                    key={item.type}
-                                    type="button"
-                                    onClick={() => setSelectedType(item.type)}
-                                    className={`group rounded-2xl border p-4 text-left shadow-sm transition ${
-                                        selectedType === item.type
-                                            ? 'border-emerald-400 bg-emerald-50'
-                                            : 'border-slate-200 bg-white hover:border-slate-300'
-                                    }`}
-                                >
-                                    <div className="text-base font-semibold text-slate-900">{item.title}</div>
-                                    <div className="mt-2 text-sm text-slate-600">{item.hint}</div>
-                                </button>
-                            ))}
-                        </div>
+                    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <div className="grid gap-4">
+                                <label className="grid gap-2">
+                                    <div className="text-sm font-medium">Название <span className="text-rose-500">*</span></div>
+                                    <input
+                                        value={title}
+                                        onChange={(e) => setTitle(e.target.value)}
+                                        placeholder="Например: Презентация продукта"
+                                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400 dark:border-slate-800 dark:bg-slate-950"
+                                    />
+                                </label>
 
-                        {selectedType && (
-                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                                <div className="text-sm font-semibold text-slate-500">Тип: {selectedType}</div>
-                                <div className="mt-4 grid gap-4">
+                                <label className="grid gap-2">
+                                    <div className="text-sm font-medium">Описание</div>
+                                    <textarea
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        placeholder="Опишите цель или формат события"
+                                        className="min-h-[96px] w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400 dark:border-slate-800 dark:bg-slate-950"
+                                    />
+                                </label>
+
+                                <div className="grid gap-4 md:grid-cols-2">
                                     <label className="grid gap-2">
-                                        <div className="text-sm font-medium">Название <span className="text-rose-500">*</span></div>
+                                        <div className="text-sm font-medium">Начало <span className="text-rose-500">*</span></div>
                                         <input
-                                            value={title}
-                                            onChange={(e) => setTitle(e.target.value)}
-                                            placeholder="Например: Презентация продукта"
-                                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
+                                            type="datetime-local"
+                                            value={startAt}
+                                            onChange={(e) => setStartAt(e.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400 dark:border-slate-800 dark:bg-slate-950"
                                         />
                                     </label>
-
                                     <label className="grid gap-2">
-                                        <div className="text-sm font-medium">Описание</div>
-                                        <textarea
-                                            value={description}
-                                            onChange={(e) => setDescription(e.target.value)}
-                                            placeholder="Опишите цель или формат события"
-                                            className="min-h-[96px] w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
+                                        <div className="text-sm font-medium">Окончание <span className="text-rose-500">*</span></div>
+                                        <input
+                                            type="datetime-local"
+                                            value={endAt}
+                                            onChange={(e) => setEndAt(e.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400 dark:border-slate-800 dark:bg-slate-950"
                                         />
                                     </label>
-
-                                    {(selectedType === 'single' || selectedType === 'parent') && (
-                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                            <label className="grid gap-2">
-                                                <div className="text-sm font-medium">Дата <span className="text-rose-500">*</span></div>
-                                                <input
-                                                    type="date"
-                                                    value={date}
-                                                    onChange={(e) => setDate(e.target.value)}
-                                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                                                />
-                                            </label>
-
-                                            <label className="grid gap-2">
-                                                <div className="text-sm font-medium">Время</div>
-                                                <input
-                                                    type="time"
-                                                    value={time}
-                                                    onChange={(e) => setTime(e.target.value)}
-                                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                                                />
-                                            </label>
-
-                                            <label className="grid gap-2">
-                                                <div className="text-sm font-medium">Место</div>
-                                                <input
-                                                    value={location}
-                                                    onChange={(e) => setLocation(e.target.value)}
-                                                    placeholder="Офис, переговорная, онлайн"
-                                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                                                />
-                                            </label>
-
-                                            {selectedType === 'single' && (
-                                                <label className="grid gap-2">
-                                                    <div className="text-sm font-medium">Максимум участников</div>
-                                                    <input
-                                                        type="number"
-                                                        min={1}
-                                                        value={maxParticipants}
-                                                        onChange={(e) => setMaxParticipants(e.target.value)}
-                                                        placeholder="Например: 20"
-                                                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                                                    />
-                                                </label>
-                                            )}
-
-                                            {selectedType === 'parent' && (
-                                                <label className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={mandatoryAttendance}
-                                                        onChange={(e) => setMandatoryAttendance(e.target.checked)}
-                                                        className="h-4 w-4 accent-emerald-500"
-                                                    />
-                                                    Обязательное посещение всех подсобытий
-                                                </label>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {selectedType === 'service' && (
-                                        <div className="space-y-4">
-                                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                                <div>
-                                                    <div className="text-sm font-semibold">Слоты для записи</div>
-                                                    <div className="text-xs text-slate-500">Добавьте минимум один слот.</div>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={addSlot}
-                                                    className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-                                                >
-                                                    Добавить слот
-                                                </button>
-                                            </div>
-
-                                            {slots.length === 0 && (
-                                                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
-                                                    Слоты пока не добавлены.
-                                                </div>
-                                            )}
-
-                                            <div className="space-y-3">
-                                                {slots.map((slot, index) => (
-                                                    <div key={slot.id} className="rounded-xl border border-slate-200 p-4">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="text-sm font-semibold">Слот #{index + 1}</div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => removeSlot(slot.id)}
-                                                                className="text-xs text-rose-500 hover:text-rose-600"
-                                                            >
-                                                                Удалить
-                                                            </button>
-                                                        </div>
-                                                        <div className="mt-3 grid gap-3 md:grid-cols-3">
-                                                            <label className="grid gap-2">
-                                                                <div className="text-xs font-medium text-slate-500">Начало</div>
-                                                                <input
-                                                                    type="datetime-local"
-                                                                    value={slot.startTime}
-                                                                    onChange={(e) => updateSlot(slot.id, { startTime: e.target.value })}
-                                                                    className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-emerald-400"
-                                                                />
-                                                            </label>
-                                                            <label className="grid gap-2">
-                                                                <div className="text-xs font-medium text-slate-500">Окончание</div>
-                                                                <input
-                                                                    type="datetime-local"
-                                                                    value={slot.endTime}
-                                                                    onChange={(e) => updateSlot(slot.id, { endTime: e.target.value })}
-                                                                    className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-emerald-400"
-                                                                />
-                                                            </label>
-                                                            <label className="grid gap-2">
-                                                                <div className="text-xs font-medium text-slate-500">Лимит участников</div>
-                                                                <input
-                                                                    type="number"
-                                                                    min={1}
-                                                                    value={slot.maxParticipants ?? ''}
-                                                                    onChange={(e) => updateSlot(slot.id, { maxParticipants: e.target.value ? Number(e.target.value) : undefined })}
-                                                                    className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-emerald-400"
-                                                                />
-                                                            </label>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            <label className="grid gap-2">
-                                                <div className="text-sm font-medium">Подтверждение записи</div>
-                                                <select
-                                                    value={confirmationMode}
-                                                    onChange={(e) => setConfirmationMode(e.target.value as 'auto' | 'manual')}
-                                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                                                >
-                                                    <option value="auto">Автоматическое</option>
-                                                    <option value="manual">Ручное</option>
-                                                </select>
-                                            </label>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
-                        )}
+                        </div>
 
-                        <div className="flex flex-col gap-3">
-                            <button
-                                type="button"
-                                onClick={submit}
-                                disabled={!canSubmit || isSubmitting}
-                                className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200/60 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {isSubmitting ? 'Создание…' : 'Создать событие'}
-                            </button>
-                            {error ? (
-                                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
-                                    <div className="font-semibold">Ошибка</div>
-                                    <div className="mt-1 whitespace-pre-wrap">{error}</div>
-                                </div>
-                            ) : null}
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
+                            <div className="text-xs uppercase tracking-[0.2em]">Подсказка</div>
+                            <div className="mt-2 font-semibold">Draft без сценариев</div>
+                            <div className="mt-2 text-sm text-amber-900/90 dark:text-amber-100/90">
+                                Черновик не рассылает уведомлений и не ставит задачи в очередь. Приглашения запускаются отдельно через Telegram.
+                            </div>
                         </div>
                     </div>
                 )}
+
+                <div className="flex flex-col gap-3">
+                    {!createdEventId && (
+                        <button
+                            type="button"
+                            onClick={submit}
+                            disabled={!canSubmit || isSubmitting}
+                            className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200/60 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {isSubmitting ? 'Создание…' : 'Создать событие'}
+                        </button>
+                    )}
+                    {error ? (
+                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
+                            <div className="font-semibold">Ошибка</div>
+                            <div className="mt-1 whitespace-pre-wrap">{error}</div>
+                        </div>
+                    ) : null}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-4 text-xs text-slate-500 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60 dark:text-slate-400">
+                    Workspace: {workspaceId}
+                </div>
             </div>
         </div>
     );

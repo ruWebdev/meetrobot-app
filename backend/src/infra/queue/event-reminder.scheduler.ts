@@ -28,6 +28,7 @@ export class EventReminderScheduler {
             'remind',
             { eventId: params.eventId },
             {
+                jobId: `remind:${params.eventId}`,
                 delay: delayMs,
                 attempts: 1,
                 removeOnComplete: true,
@@ -48,6 +49,7 @@ export class EventReminderScheduler {
             'complete',
             { eventId: params.eventId },
             {
+                jobId: `complete:${params.eventId}`,
                 delay: delayMs,
                 attempts: 1,
                 removeOnComplete: true,
@@ -56,8 +58,23 @@ export class EventReminderScheduler {
         );
     }
 
+    async removeScheduledJobs(eventId: string): Promise<void> {
+        await Promise.all([
+            this.safeRemoveJob(`remind:${eventId}`),
+            this.safeRemoveJob(`complete:${eventId}`),
+        ]);
+    }
+
     private computeReminderAt(startAt: Date): Date | null {
         const reminderAt = new Date(startAt.getTime() - 60 * 60 * 1000);
         return reminderAt;
+    }
+
+    private async safeRemoveJob(jobId: string): Promise<void> {
+        try {
+            await this.queue.remove(jobId);
+        } catch (error) {
+            this.logger.warn(`[Reminder] Failed to remove job ${jobId}`, error as any);
+        }
     }
 }

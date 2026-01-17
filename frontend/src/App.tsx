@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
 import CreateEventPage from './pages/CreateEventPage';
+import EventDetailsPage from './pages/EventDetailsPage';
 
 type MeResponse = {
     id: string;
@@ -208,9 +209,15 @@ const App: React.FC = () => {
     const workspaceId = path.startsWith('/workspaces/') ? path.split('/')[2] || '' : '';
     const isCreateEventRoute = Boolean(workspaceId && path === `/workspaces/${workspaceId}/events/create`);
     const isWorkspaceHome = Boolean(workspaceId && me?.activeWorkspace?.id === workspaceId);
+    const eventId = path.startsWith(`/workspaces/${workspaceId}/events/`) ? path.split('/')[4] || '' : '';
+    const isEventDetailsRoute = Boolean(workspaceId && eventId && path === `/workspaces/${workspaceId}/events/${eventId}`);
 
     if (isCreateEventRoute) {
-        return <CreateEventPage workspaceId={workspaceId} />;
+        return <CreateEventPage workspaceId={workspaceId} onNavigate={navigate} />;
+    }
+
+    if (isEventDetailsRoute) {
+        return <EventDetailsPage workspaceId={workspaceId} eventId={eventId} onNavigate={navigate} />;
     }
 
     return (

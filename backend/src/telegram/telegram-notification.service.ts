@@ -37,6 +37,7 @@ export class TelegramNotificationService {
             where: { eventId: event.id },
             select: {
                 userId: true,
+                role: true,
                 participationStatus: true,
                 user: { select: { telegramId: true, firstName: true, lastName: true, username: true } },
             },
@@ -54,6 +55,9 @@ export class TelegramNotificationService {
 
         const bot = this.telegramService.getBot();
         const keyboard = this.buildParticipationKeyboard(event.id);
+        const organizer = participants.find((p: { role?: string }) => p.role === 'organizer');
+        const organizerTelegramId = organizer?.user?.telegramId;
+        const organizerKeyboard = this.buildOrganizerKeyboard(event.id);
 
         const tgGroup = await this.prisma.telegramGroup.findFirst({
             where: { workspaceId: event.workspaceId },
@@ -84,6 +88,14 @@ export class TelegramNotificationService {
                 }
             }),
         );
+
+        if (organizerTelegramId) {
+            try {
+                await bot.api.sendMessage(organizerTelegramId, text, { reply_markup: organizerKeyboard });
+            } catch (error) {
+                this.logger.warn(`[Telegram] Failed to deliver organizer card to ${organizerTelegramId}: ${eventId}`, error as any);
+            }
+        }
     }
 
     async sendEventCancelled(eventId: string): Promise<void> {
@@ -185,6 +197,10 @@ export class TelegramNotificationService {
             .text('Под вопросом', `event:${eventId}:response:tentative`);
     }
 
+    private buildOrganizerKeyboard(eventId: string): InlineKeyboard {
+        return new InlineKeyboard().text('Отменить событие', `event:${eventId}:cancel`);
+    }
+
     private buildEventCardText(params: {
         title: string;
         description: string | null;
@@ -212,9 +228,9 @@ export class TelegramNotificationService {
         return text;
     }
 
-    private buildParticipantsList(participants: Array<{ user?: { firstName?: string | null; lastName?: string | null; username?: string | null }; participationStatus: string }>): string {
+    private buildParticipantsList(participants: Array<{ user?: { firstName?: string | null; lastName?: string | null; username?: string | null }; participationStatus: string; role?: string }>): string {
         return participants
-            .map((p) => `${this.mapStatus(p.participationStatus)} ${this.formatUserName(p.user)}`)
+            .map((p) => `${this.mapStatus(p.participationStatus)} ${this.formatUserName(p.user)}${p.role === 'organizer' ? ' (организатор)' : ''}`)
             .join('\n');
     }
 

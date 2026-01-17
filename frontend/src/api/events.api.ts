@@ -1,4 +1,4 @@
-import { CreateEventPayload, CreateEventResponse, EditEventDto, EventForEditResponse } from '../types/events';
+import { CreateEventPayload, EventDetails } from '../types/events';
 
 export type ApiError = {
     status: number;
@@ -23,128 +23,62 @@ function normalizeErrorMessage(data: any): string {
     }
 }
 
-export async function createWorkspaceEvent(params: {
+async function request<T>(params: {
     apiBaseUrl: string;
     userId: string;
-    workspaceId: string;
+    path: string;
+    method?: string;
+    body?: any;
+}): Promise<T> {
+    const resp = await fetch(`${params.apiBaseUrl}${params.path}`, {
+        method: params.method ?? 'GET',
+        headers: {
+            'content-type': 'application/json',
+            'x-user-id': params.userId,
+        },
+        body: params.body ? JSON.stringify(params.body) : undefined,
+    });
+
+    const text = await resp.text();
+    let data: any = null;
+    try {
+        data = text ? JSON.parse(text) : null;
+    } catch {
+        data = { raw: text };
+    }
+
+    if (!resp.ok) {
+        throw {
+            status: resp.status,
+            message: normalizeErrorMessage(data),
+        } satisfies ApiError;
+    }
+
+    return data as T;
+}
+
+export async function createEvent(params: {
+    apiBaseUrl: string;
+    userId: string;
     payload: CreateEventPayload;
-}): Promise<CreateEventResponse> {
-    const resp = await fetch(`${params.apiBaseUrl}/workspace/${params.workspaceId}/event`, {
+}): Promise<EventDetails> {
+    return request<EventDetails>({
+        apiBaseUrl: params.apiBaseUrl,
+        userId: params.userId,
+        path: '/events',
         method: 'POST',
-        headers: {
-            'content-type': 'application/json',
-            'x-user-id': params.userId,
-        },
-        body: JSON.stringify(params.payload),
+        body: params.payload,
     });
-
-    const text = await resp.text();
-    let data: any = null;
-    try {
-        data = text ? JSON.parse(text) : null;
-    } catch {
-        data = { raw: text };
-    }
-
-    if (!resp.ok) {
-        throw {
-            status: resp.status,
-            message: normalizeErrorMessage(data),
-        } satisfies ApiError;
-    }
-
-    return data as CreateEventResponse;
 }
 
-export async function getEventForEdit(params: {
+export async function getEventDetails(params: {
     apiBaseUrl: string;
     userId: string;
     eventId: string;
-}): Promise<EventForEditResponse> {
-    const resp = await fetch(`${params.apiBaseUrl}/events/${params.eventId}`, {
-        method: 'GET',
-        headers: {
-            'x-user-id': params.userId,
-        },
+}): Promise<EventDetails> {
+    return request<EventDetails>({
+        apiBaseUrl: params.apiBaseUrl,
+        userId: params.userId,
+        path: `/events/${params.eventId}`,
     });
-
-    const text = await resp.text();
-    let data: any = null;
-    try {
-        data = text ? JSON.parse(text) : null;
-    } catch {
-        data = { raw: text };
-    }
-
-    if (!resp.ok) {
-        throw {
-            status: resp.status,
-            message: normalizeErrorMessage(data),
-        } satisfies ApiError;
-    }
-
-    return data as EventForEditResponse;
-}
-
-export async function updateEvent(params: {
-    apiBaseUrl: string;
-    userId: string;
-    eventId: string;
-    payload: EditEventDto;
-}): Promise<any> {
-    const resp = await fetch(`${params.apiBaseUrl}/events/${params.eventId}`, {
-        method: 'PATCH',
-        headers: {
-            'content-type': 'application/json',
-            'x-user-id': params.userId,
-        },
-        body: JSON.stringify(params.payload),
-    });
-
-    const text = await resp.text();
-    let data: any = null;
-    try {
-        data = text ? JSON.parse(text) : null;
-    } catch {
-        data = { raw: text };
-    }
-
-    if (!resp.ok) {
-        throw {
-            status: resp.status,
-            message: normalizeErrorMessage(data),
-        } satisfies ApiError;
-    }
-
-    return data;
-}
-
-export async function deleteEvent(params: {
-    apiBaseUrl: string;
-    userId: string;
-    eventId: string;
-}): Promise<any> {
-    const resp = await fetch(`${params.apiBaseUrl}/events/${params.eventId}`, {
-        method: 'DELETE',
-        headers: {
-            'x-user-id': params.userId,
-        },
-    });
-
-    const text = await resp.text();
-    let data: any = null;
-    try {
-        data = text ? JSON.parse(text) : null;
-    } catch {
-        data = { raw: text };
-    }
-
-    if (!resp.ok) {
-        throw {
-            status: resp.status,
-            message: normalizeErrorMessage(data),
-        } satisfies ApiError;
-    }
-
-    return data;
 }

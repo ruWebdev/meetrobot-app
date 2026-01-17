@@ -74,15 +74,6 @@ export class EventsService {
             return event;
         });
 
-        try {
-            await this.eventReminderScheduler.scheduleCompletionForEvent({
-                eventId: created.id,
-                endAt: (created as any).endAt,
-            });
-        } catch (error) {
-            this.logger.warn(`[Reminder] Failed to schedule completion for event ${created.id}`, error as any);
-        }
-
         return created;
     }
 
@@ -265,6 +256,12 @@ export class EventsService {
             where: { id: eventId },
             data: { status: 'cancelled' },
         });
+
+        try {
+            await this.eventReminderScheduler.removeScheduledJobs(eventId);
+        } catch (error) {
+            this.logger.warn(`[Reminder] Failed to remove scheduled jobs for event ${eventId}`, error as any);
+        }
 
         try {
             await this.telegramNotificationService.sendEventCancelled(eventId);
