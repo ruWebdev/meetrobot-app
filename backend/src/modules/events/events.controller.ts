@@ -1,26 +1,12 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Patch, Post, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Post, UnauthorizedException } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
-import { UpdateEventDto } from './dto/update-event.dto';
+import { InviteParticipantsDto } from './dto/invite-participants.dto';
+import { RespondEventDto } from './dto/respond-event.dto';
 
 @Controller('events')
 export class EventsController {
     constructor(private readonly eventsService: EventsService) { }
-
-    @Get(':eventId')
-    async getEvent(
-        @Param('eventId') eventId: string,
-        @Headers('x-user-id') userId: string,
-    ) {
-        if (!userId) {
-            throw new UnauthorizedException('Отсутствует заголовок x-user-id');
-        }
-
-        return this.eventsService.getEventForEdit({
-            userId,
-            eventId,
-        });
-    }
 
     @Post()
     async createEvent(
@@ -37,29 +23,46 @@ export class EventsController {
         });
     }
 
-    @Patch(':eventId')
-    async updateEvent(
+    @Post(':eventId/invite')
+    async inviteParticipants(
         @Param('eventId') eventId: string,
         @Headers('x-user-id') userId: string,
-        @Body() dto: UpdateEventDto,
+        @Body() dto: InviteParticipantsDto,
     ) {
         if (!userId) {
             throw new UnauthorizedException('Отсутствует заголовок x-user-id');
         }
 
-        if (!dto || Object.keys(dto).length === 0) {
-            throw new BadRequestException('Payload не может быть пустым');
+        if (!dto || !dto.participantIds || dto.participantIds.length === 0) {
+            throw new BadRequestException('Список участников не может быть пустым');
         }
 
-        return this.eventsService.updateEvent({
+        return this.eventsService.inviteParticipants({
             userId,
             eventId,
-            dto,
+            participantIds: dto.participantIds,
         });
     }
 
-    @Delete(':eventId')
-    async deleteEvent(
+    @Post(':eventId/respond')
+    async respondToEvent(
+        @Param('eventId') eventId: string,
+        @Headers('x-user-id') userId: string,
+        @Body() dto: RespondEventDto,
+    ) {
+        if (!userId) {
+            throw new UnauthorizedException('Отсутствует заголовок x-user-id');
+        }
+
+        return this.eventsService.respondToEvent({
+            userId,
+            eventId,
+            status: dto.status,
+        });
+    }
+
+    @Post(':eventId/cancel')
+    async cancelEvent(
         @Param('eventId') eventId: string,
         @Headers('x-user-id') userId: string,
     ) {
@@ -67,7 +70,22 @@ export class EventsController {
             throw new UnauthorizedException('Отсутствует заголовок x-user-id');
         }
 
-        return this.eventsService.deleteEvent({
+        return this.eventsService.cancelEvent({
+            userId,
+            eventId,
+        });
+    }
+
+    @Get(':eventId')
+    async getEventDetails(
+        @Param('eventId') eventId: string,
+        @Headers('x-user-id') userId: string,
+    ) {
+        if (!userId) {
+            throw new UnauthorizedException('Отсутствует заголовок x-user-id');
+        }
+
+        return this.eventsService.getEventDetails({
             userId,
             eventId,
         });

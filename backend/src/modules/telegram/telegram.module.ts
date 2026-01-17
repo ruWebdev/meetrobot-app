@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TelegramService } from './telegram.service';
 import { TelegramController } from './telegram.controller';
 import { UserModule } from '../user/user.module';
@@ -7,9 +7,10 @@ import { RedisModule } from '../../infra/redis/redis.module';
 import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { UserSessionService } from './user-session.service';
 import { BotFlowDispatcher } from './bot-flow-dispatcher.service';
+import { EventsModule } from '../events/events.module';
 
 @Module({
-    imports: [UserModule, WorkspaceModule, PrismaModule, RedisModule],
+    imports: [UserModule, WorkspaceModule, PrismaModule, RedisModule, forwardRef(() => EventsModule)],
     controllers: [TelegramController],
     providers: [
         TelegramService,

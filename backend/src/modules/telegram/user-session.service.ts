@@ -30,6 +30,8 @@ export class UserSessionService {
             workspaceId: params.workspaceId,
             activeFlowType: null,
             activeEntityId: null,
+            eventDraft: null,
+            eventDraftStep: null,
             updatedAt: new Date(),
         };
 
@@ -53,6 +55,8 @@ export class UserSessionService {
             workspaceId: params.workspaceId,
             activeFlowType: null,
             activeEntityId: null,
+            eventDraft: null,
+            eventDraftStep: null,
             updatedAt: new Date(),
         };
         await this.save(session);

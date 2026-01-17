@@ -8,5 +8,14 @@ export interface UserSession {
     activeFlowType: FlowType | null;
     activeEntityId: string | null;
 
+    eventDraft?: {
+        workspaceId?: string;
+        title?: string;
+        description?: string | null;
+        startAt?: string;
+        endAt?: string;
+    } | null;
+    eventDraftStep?: 'title' | 'description' | 'startAt' | 'endAt' | 'confirm' | null;
+
     updatedAt: Date;
 }

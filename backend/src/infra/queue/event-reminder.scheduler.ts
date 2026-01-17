@@ -11,8 +11,8 @@ export class EventReminderScheduler {
         private readonly queue: Queue,
     ) { }
 
-    async scheduleReminderForEvent(params: { eventId: string; date: Date; timeStart: string }) {
-        const reminderAt = this.computeReminderAt(params.date, params.timeStart);
+    async scheduleReminderForEvent(params: { eventId: string; startAt: Date }) {
+        const reminderAt = this.computeReminderAt(params.startAt);
         if (!reminderAt) {
             return;
         }
@@ -36,22 +36,28 @@ export class EventReminderScheduler {
         );
     }
 
-    private computeReminderAt(date: Date, timeStart: string): Date | null {
-        const match = timeStart.match(/^(\d{1,2}):(\d{2})$/);
-        if (!match) {
-            return null;
+    async scheduleCompletionForEvent(params: { eventId: string; endAt: Date }) {
+        const delayMs = params.endAt.getTime() - Date.now();
+        if (delayMs <= 0) {
+            return;
         }
 
-        const hours = Number(match[1]);
-        const minutes = Number(match[2]);
-        if (Number.isNaN(hours) || Number.isNaN(minutes)) {
-            return null;
-        }
+        this.logger.log(`[Reminder] Scheduled completion for event ${params.eventId} at ${params.endAt.toISOString()}`);
 
-        const startsAt = new Date(date);
-        startsAt.setHours(hours, minutes, 0, 0);
+        await this.queue.add(
+            'complete',
+            { eventId: params.eventId },
+            {
+                delay: delayMs,
+                attempts: 1,
+                removeOnComplete: true,
+                removeOnFail: true,
+            },
+        );
+    }
 
-        const reminderAt = new Date(startsAt.getTime() - 60 * 60 * 1000);
+    private computeReminderAt(startAt: Date): Date | null {
+        const reminderAt = new Date(startAt.getTime() - 60 * 60 * 1000);
         return reminderAt;
     }
 }

@@ -13,119 +13,91 @@ export class TelegramNotificationService {
         private readonly telegramService: TelegramService,
     ) { }
 
-    async sendEventCreated(eventId: string): Promise<void> {
-        this.logger.log(`[Telegram] Sending event card ${eventId}`);
+    async sendEventInvitations(eventId: string, participantIds: string[]): Promise<void> {
+        this.logger.log(`[Telegram] Sending invitations for event ${eventId}`);
 
-        const masterEvent = await this.prisma.event.findFirst({
-            where: { id: eventId, deletedAt: null },
+        const event = await (this.prisma as any).event.findUnique({
+            where: { id: eventId },
             select: {
                 id: true,
                 workspaceId: true,
                 title: true,
                 description: true,
-                date: true,
-                timeStart: true,
-                timeEnd: true,
-                location: true,
-                type: true,
-                deletedAt: true,
+                startAt: true,
+                endAt: true,
             },
         });
 
-        if (!masterEvent) {
-            this.logger.warn(`[Telegram] Event not found for card delivery: ${eventId}`);
+        if (!event) {
+            this.logger.warn(`[Telegram] Event not found for invitations: ${eventId}`);
             return;
         }
 
-        if (masterEvent.type !== 'master') {
-            this.logger.warn(`[Telegram] Event is not master (skip card delivery): ${eventId}`);
-            return;
-        }
-
-        const subEvents = await this.prisma.event.findMany({
-            where: { parentEventId: masterEvent.id, deletedAt: null },
+        const participants = await (this.prisma as any).eventParticipant.findMany({
+            where: { eventId: event.id },
             select: {
-                id: true,
-                title: true,
-                date: true,
-                timeStart: true,
-                timeEnd: true,
+                userId: true,
+                participationStatus: true,
+                user: { select: { telegramId: true, firstName: true, lastName: true, username: true } },
             },
-            orderBy: [{ date: 'asc' }, { timeStart: 'asc' }],
+            orderBy: [{ participationStatus: 'asc' }],
         });
 
+        const list = this.buildParticipantsList(participants);
         const text = this.buildEventCardText({
-            masterEvent: {
-                title: masterEvent.title,
-                description: masterEvent.description,
-                date: masterEvent.date,
-                timeStart: masterEvent.timeStart,
-                timeEnd: masterEvent.timeEnd,
-                location: masterEvent.location,
-            },
-            subEvents: subEvents.map((se) => ({
-                title: se.title,
-                date: se.date,
-                timeStart: se.timeStart,
-                timeEnd: se.timeEnd,
-            })),
+            title: event.title,
+            description: event.description,
+            startAt: event.startAt,
+            endAt: event.endAt,
+            participants: list,
         });
 
         const bot = this.telegramService.getBot();
-        const keyboard = this.buildParticipationKeyboard(masterEvent.id);
+        const keyboard = this.buildParticipationKeyboard(event.id);
 
         const tgGroup = await this.prisma.telegramGroup.findFirst({
-            where: { workspaceId: masterEvent.workspaceId },
+            where: { workspaceId: event.workspaceId },
             select: { telegramChatId: true, type: true },
         });
 
         if (tgGroup?.telegramChatId && (tgGroup.type === 'group' || tgGroup.type === 'supergroup')) {
             try {
-                await bot.api.sendMessage(tgGroup.telegramChatId, text, { parse_mode: 'Markdown', reply_markup: keyboard });
-                this.logger.log(`[Telegram] Event card delivered to group ${tgGroup.telegramChatId}`);
+                await bot.api.sendMessage(tgGroup.telegramChatId, text, { reply_markup: keyboard });
             } catch (error) {
-                this.logger.warn(`[Telegram] Failed to deliver event card to group ${tgGroup.telegramChatId}: ${eventId}`, error as any);
+                this.logger.warn(`[Telegram] Failed to deliver event invite to group ${tgGroup.telegramChatId}: ${eventId}`, error as any);
             }
-            return;
         }
 
-        const participations = await this.prisma.participation.findMany({
-            where: { eventId: masterEvent.id },
-            select: { user: { select: { telegramId: true } } },
-        });
+        if (!participantIds.length) return;
+
+        const invitedUsers = participants.filter((p: { userId: string }) => participantIds.includes(p.userId));
 
         await Promise.all(
-            participations.map(async (p) => {
+            invitedUsers.map(async (p: { user?: { telegramId?: string | null } }) => {
                 const telegramId = p.user?.telegramId;
                 if (!telegramId) return;
 
                 try {
-                    await bot.api.sendMessage(telegramId, text, { parse_mode: 'Markdown', reply_markup: keyboard });
+                    await bot.api.sendMessage(telegramId, text, { reply_markup: keyboard });
                 } catch (error) {
-                    this.logger.warn(`[Telegram] Failed to deliver event card to user ${telegramId}: ${eventId}`, error as any);
+                    this.logger.warn(`[Telegram] Failed to deliver event invite to user ${telegramId}: ${eventId}`, error as any);
                 }
             }),
         );
     }
 
     async sendEventCancelled(eventId: string): Promise<void> {
-        const event = await this.prisma.event.findUnique({
+        const event = await (this.prisma as any).event.findUnique({
             where: { id: eventId },
             select: {
                 id: true,
                 workspaceId: true,
                 title: true,
-                type: true,
             },
         });
 
         if (!event) {
             this.logger.warn(`[Telegram] Event not found for cancel notification: ${eventId}`);
-            return;
-        }
-
-        if (event.type !== 'master') {
-            this.logger.warn(`[Telegram] Event is not master (skip cancel notification): ${eventId}`);
             return;
         }
 
@@ -143,16 +115,15 @@ export class TelegramNotificationService {
             } catch (error) {
                 this.logger.warn(`[Telegram] Failed to deliver event cancelled notification to group ${tgGroup.telegramChatId}: ${eventId}`, error as any);
             }
-            return;
         }
 
-        const participations = await this.prisma.participation.findMany({
+        const participants = await (this.prisma as any).eventParticipant.findMany({
             where: { eventId: event.id },
             select: { user: { select: { telegramId: true } } },
         });
 
         await Promise.all(
-            participations.map(async (p) => {
+            participants.map(async (p: { user?: { telegramId?: string | null } }) => {
                 const telegramId = p.user?.telegramId;
                 if (!telegramId) return;
 
@@ -165,123 +136,101 @@ export class TelegramNotificationService {
         );
     }
 
-    async sendEventUpdated(eventId: string): Promise<void> {
-        const event = await this.prisma.event.findFirst({
-            where: { id: eventId, deletedAt: null },
-            select: {
-                id: true,
-                workspaceId: true,
-                title: true,
-                date: true,
-                timeStart: true,
-                timeEnd: true,
-                location: true,
-            },
+    async sendParticipationStatusChanged(eventId: string, userId: string): Promise<void> {
+        const event = await (this.prisma as any).event.findUnique({
+            where: { id: eventId },
+            select: { id: true, title: true },
         });
 
         if (!event) {
-            this.logger.warn(`[Telegram] Event not found for update notification: ${eventId}`);
+            this.logger.warn(`[Telegram] Event not found for participation update: ${eventId}`);
             return;
         }
 
-        const text = this.buildEventUpdatedText({
-            title: event.title,
-            date: event.date,
-            timeStart: event.timeStart,
-            timeEnd: event.timeEnd,
-            location: event.location,
-        });
-
-        const bot = this.telegramService.getBot();
-
-        const tgGroup = await this.prisma.telegramGroup.findFirst({
-            where: { workspaceId: event.workspaceId },
-            select: { telegramChatId: true, type: true },
-        });
-
-        if (tgGroup?.telegramChatId && (tgGroup.type === 'group' || tgGroup.type === 'supergroup')) {
-            try {
-                await bot.api.sendMessage(tgGroup.telegramChatId, text);
-            } catch (error) {
-                this.logger.warn(`[Telegram] Failed to deliver event updated notification to group ${tgGroup.telegramChatId}: ${eventId}`, error as any);
-            }
-            return;
-        }
-
-        const participations = await this.prisma.participation.findMany({
-            where: { eventId: event.id },
+        const organizer = await (this.prisma as any).eventParticipant.findFirst({
+            where: { eventId, role: 'organizer' },
             select: { user: { select: { telegramId: true } } },
         });
 
-        await Promise.all(
-            participations.map(async (p) => {
-                const telegramId = p.user?.telegramId;
-                if (!telegramId) return;
+        const participant = await (this.prisma as any).eventParticipant.findUnique({
+            where: {
+                eventId_userId: { eventId, userId },
+            },
+            select: { participationStatus: true, user: { select: { firstName: true, lastName: true, username: true } } },
+        });
 
-                try {
-                    await bot.api.sendMessage(telegramId, text);
-                } catch (error) {
-                    this.logger.warn(`[Telegram] Failed to deliver event updated notification to user ${telegramId}: ${eventId}`, error as any);
-                }
-            }),
-        );
+        const telegramId = organizer?.user?.telegramId;
+        if (!telegramId || !participant) {
+            return;
+        }
+
+        const text =
+            `Ответ на приглашение\n\n` +
+            `Событие: ${event.title}\n` +
+            `Участник: ${this.formatUserName(participant.user)}\n` +
+            `Статус: ${this.mapStatus(participant.participationStatus)}`;
+
+        try {
+            await this.telegramService.getBot().api.sendMessage(telegramId, text);
+        } catch (error) {
+            this.logger.warn(`[Telegram] Failed to notify organizer ${telegramId} about status update: ${eventId}`, error as any);
+        }
     }
 
     private buildParticipationKeyboard(eventId: string): InlineKeyboard {
         return new InlineKeyboard()
-            .text('Буду участвовать', `event:${eventId}:response:accepted`)
-            .text('Не буду участвовать', `event:${eventId}:response:declined`)
+            .text('Подтвердить', `event:${eventId}:response:confirmed`)
+            .text('Отказаться', `event:${eventId}:response:declined`)
             .row()
-            .text('Пока не уверен', `event:${eventId}:response:tentative`)
-            .row()
-            .text('Редактировать', `event:${eventId}:edit`);
+            .text('Под вопросом', `event:${eventId}:response:tentative`);
     }
 
     private buildEventCardText(params: {
-        masterEvent: {
-            title: string;
-            description: string | null;
-            date: Date;
-            timeStart: string;
-            timeEnd: string;
-            location: string;
-        };
-        subEvents: Array<{ title: string; date: Date; timeStart: string; timeEnd: string }>;
+        title: string;
+        description: string | null;
+        startAt: Date;
+        endAt: Date;
+        participants: string;
     }): string {
-        const date = params.masterEvent.date.toLocaleDateString('ru-RU');
+        const start = params.startAt.toLocaleString('ru-RU');
+        const end = params.endAt.toLocaleString('ru-RU');
 
         let text =
-            `Новое событие\n\n` +
-            `Название: ${params.masterEvent.title}\n` +
-            `Дата: ${date}\n` +
-            `Время: ${params.masterEvent.timeStart}–${params.masterEvent.timeEnd}\n` +
-            `Место: ${params.masterEvent.location}`;
+            `Событие\n\n` +
+            `Название: ${params.title}\n` +
+            `Начало: ${start}\n` +
+            `Окончание: ${end}`;
 
-        if (params.masterEvent.description) {
-            text += `\n\n${params.masterEvent.description}`;
+        if (params.description) {
+            text += `\n\n${params.description}`;
         }
 
-        if (params.subEvents.length) {
-            text += `\n\nПод-события:`;
-            for (const se of params.subEvents) {
-                const seDate = se.date.toLocaleDateString('ru-RU');
-                text += `\n- ${se.title}: ${seDate}, ${se.timeStart}–${se.timeEnd}`;
-            }
+        if (params.participants) {
+            text += `\n\nУчастники:\n${params.participants}`;
         }
 
         return text;
     }
 
-    private buildEventUpdatedText(params: { title: string; date: Date; timeStart: string; timeEnd: string; location: string }): string {
-        const date = params.date.toLocaleDateString('ru-RU');
-        return (
-            `Событие обновлено\n\n` +
-            `Событие: ${params.title}\n` +
-            `Дата: ${date}\n` +
-            `Время: ${params.timeStart}–${params.timeEnd}\n` +
-            `Место: ${params.location}\n\n` +
-            `Ваш предыдущий ответ сброшен.\n` +
-            `Пожалуйста, подтвердите участие ещё раз.`
-        );
+    private buildParticipantsList(participants: Array<{ user?: { firstName?: string | null; lastName?: string | null; username?: string | null }; participationStatus: string }>): string {
+        return participants
+            .map((p) => `${this.mapStatus(p.participationStatus)} ${this.formatUserName(p.user)}`)
+            .join('\n');
+    }
+
+    private formatUserName(user?: { firstName?: string | null; lastName?: string | null; username?: string | null }): string {
+        if (!user) return 'Без имени';
+        const base = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+        if (base) return base;
+        if (user.username) return `@${user.username}`;
+        return 'Без имени';
+    }
+
+    private mapStatus(status: string): string {
+        if (status === 'confirmed') return '✅';
+        if (status === 'declined') return '❌';
+        if (status === 'tentative') return '❔';
+        if (status === 'invited') return '📨';
+        return '•';
     }
 }

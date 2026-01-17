@@ -3,6 +3,9 @@ import { InlineKeyboard } from 'grammy';
 import { ConfigService } from '@nestjs/config';
 import { WorkspaceService } from '../workspace/workspace.service';
 import { UserService } from '../user/user.service';
+import { UserSessionService } from './user-session.service';
+import { UserSession } from './user-session';
+import { EventsService } from '../events/events.service';
 
 @Injectable()
 export class BotFlowDispatcher {
@@ -13,6 +16,8 @@ export class BotFlowDispatcher {
         private readonly userService: UserService,
         private readonly workspaceService: WorkspaceService,
         private readonly configService: ConfigService,
+        private readonly userSessionService: UserSessionService,
+        private readonly eventsService: EventsService,
     ) { }
 
     async onUpdate(ctx: any): Promise<void> {
@@ -23,7 +28,6 @@ export class BotFlowDispatcher {
         }
 
         if (ctx.chat?.type !== 'private') {
-            // На этапах 1–2 вся работа с Workspace идёт через личный чат с ботом
             if (this.isCommand(ctx, 'start')) {
                 await this.safeReply(ctx, 'Для управления рабочими пространствами откройте личный чат со мной и отправьте команду /start.');
             }
@@ -59,7 +63,6 @@ export class BotFlowDispatcher {
             return;
         }
 
-        // Любое другое сообщение в личке ведёт к экрану выбора/создания Workspace
         if (this.isAnyUserMessage(ctx)) {
             const pendingKey = this.buildPendingKey(user.id, ctx.chat?.id?.toString());
             if (pendingKey && this.pendingWorkspaceCreation.has(pendingKey)) {
@@ -67,8 +70,261 @@ export class BotFlowDispatcher {
                 return;
             }
 
+            const activeWorkspaceId = user.activeWorkspaceId ?? null;
+            if (activeWorkspaceId) {
+                const session = await this.userSessionService.getOrCreate({
+                    telegramUserId,
+                    telegramChatId: ctx.chat?.id?.toString() ?? '',
+                    workspaceId: activeWorkspaceId,
+                });
+
+                if (session.eventDraftStep) {
+                    await this.handleEventDraftInput(ctx, user.id, session);
+                    return;
+                }
+            }
+
+            if (this.isCommand(ctx, 'event') || this.isCommand(ctx, 'create_event')) {
+                await this.startEventDraft(ctx, user.id, user.activeWorkspaceId ?? null);
+                return;
+            }
+
             await this.showWorkspaceEntry(ctx, user.id);
         }
+    }
+
+    private async handleEventCallback(ctx: any, userId: string, callbackData: string): Promise<void> {
+        const parts = callbackData.split(':');
+        const eventId = parts[1];
+        const action = parts[2];
+        const value = parts[3];
+
+        if (!eventId || !action) return;
+
+        if (action === 'response' && value) {
+            await ctx.answerCallbackQuery({ text: 'Ответ принят', show_alert: false });
+            try {
+                await this.eventsService.respondToEvent({
+                    userId,
+                    eventId,
+                    status: value as 'invited' | 'confirmed' | 'declined' | 'tentative',
+                });
+                await ctx.reply('Ваш ответ записан. Спасибо!');
+            } catch (error) {
+                this.logger.warn('Ошибка ответа на приглашение', error as any);
+                await ctx.reply('Не удалось обновить статус участия. Попробуйте позже.');
+            }
+            return;
+        }
+
+        if (action === 'invite') {
+            await ctx.answerCallbackQuery({ text: 'Приглашение участников', show_alert: false });
+            try {
+                const members = await this.workspaceService.getUserMemberships(userId);
+                const participantIds = members.map((m) => m.userId);
+                await this.eventsService.inviteParticipants({ userId, eventId, participantIds });
+                await ctx.reply('Приглашения отправлены участникам.');
+            } catch (error) {
+                this.logger.warn('Ошибка отправки приглашений', error as any);
+                await ctx.reply('Не удалось отправить приглашения. Проверьте статус события.');
+            }
+            return;
+        }
+
+        if (action === 'cancel') {
+            await ctx.answerCallbackQuery({ text: 'Отмена события', show_alert: false });
+            try {
+                await this.eventsService.cancelEvent({ userId, eventId });
+                await ctx.reply('Событие отменено.');
+            } catch (error) {
+                this.logger.warn('Ошибка отмены события', error as any);
+                await ctx.reply('Не удалось отменить событие.');
+            }
+            return;
+        }
+
+        if (action === 'create' && value) {
+            await ctx.answerCallbackQuery({ text: 'Создание события', show_alert: false });
+            if (value === 'confirm') {
+                await this.finalizeEventDraft(ctx, userId);
+                return;
+            }
+            if (value === 'cancel') {
+                await this.cancelEventDraft(ctx, userId);
+                return;
+            }
+        }
+    }
+
+    private async startEventDraft(ctx: any, userId: string, workspaceId: string | null): Promise<void> {
+        if (!workspaceId) {
+            await this.safeReply(ctx, 'Сначала выберите активное рабочее пространство.');
+            return;
+        }
+
+        const membership = await this.workspaceService.ensureUserMembershipInWorkspace({ userId, workspaceId });
+        if (!membership) {
+            await this.safeReply(ctx, 'Вы не состоите в активном рабочем пространстве.');
+            return;
+        }
+
+        const session = await this.userSessionService.getOrCreate({
+            telegramUserId: ctx.from.id.toString(),
+            telegramChatId: ctx.chat.id.toString(),
+            workspaceId,
+        });
+
+        session.eventDraft = { workspaceId };
+        session.eventDraftStep = 'title';
+        session.updatedAt = new Date();
+        await this.userSessionService.save(session);
+
+        await this.safeReply(ctx, 'Введите название события.');
+    }
+
+    private async handleEventDraftInput(ctx: any, userId: string, session: UserSession) {
+        const text = (ctx.message?.text ?? '').trim();
+        if (!text) {
+            await this.safeReply(ctx, 'Сообщение не может быть пустым.');
+            return;
+        }
+
+        const draft = session.eventDraft ?? {};
+
+        if (session.eventDraftStep === 'title') {
+            draft.title = text;
+            session.eventDraft = draft;
+            session.eventDraftStep = 'description';
+            session.updatedAt = new Date();
+            await this.userSessionService.save(session as any);
+            await this.safeReply(ctx, 'Введите описание события или отправьте «-», чтобы пропустить.');
+            return;
+        }
+
+        if (session.eventDraftStep === 'description') {
+            draft.description = text === '-' ? null : text;
+            session.eventDraft = draft;
+            session.eventDraftStep = 'startAt';
+            session.updatedAt = new Date();
+            await this.userSessionService.save(session as any);
+            await this.safeReply(ctx, 'Введите дату и время начала (ДД.ММ.ГГГГ ЧЧ:ММ).');
+            return;
+        }
+
+        if (session.eventDraftStep === 'startAt') {
+            const parsed = this.parseDateTime(text);
+            if (!parsed) {
+                await this.safeReply(ctx, 'Не удалось распознать дату/время. Формат: ДД.ММ.ГГГГ ЧЧ:ММ');
+                return;
+            }
+            draft.startAt = parsed.toISOString();
+            session.eventDraft = draft;
+            session.eventDraftStep = 'endAt';
+            session.updatedAt = new Date();
+            await this.userSessionService.save(session as any);
+            await this.safeReply(ctx, 'Введите дату и время окончания (ДД.ММ.ГГГГ ЧЧ:ММ).');
+            return;
+        }
+
+        if (session.eventDraftStep === 'endAt') {
+            const parsed = this.parseDateTime(text);
+            if (!parsed) {
+                await this.safeReply(ctx, 'Не удалось распознать дату/время. Формат: ДД.ММ.ГГГГ ЧЧ:ММ');
+                return;
+            }
+            const startAt = draft.startAt ? new Date(draft.startAt) : null;
+            if (startAt && parsed <= startAt) {
+                await this.safeReply(ctx, 'Время окончания должно быть позже времени начала.');
+                return;
+            }
+            draft.endAt = parsed.toISOString();
+            session.eventDraft = draft;
+            session.eventDraftStep = 'confirm';
+            session.updatedAt = new Date();
+            await this.userSessionService.save(session as any);
+
+            const summary =
+                `Проверьте данные:\n` +
+                `Название: ${draft.title}\n` +
+                `Описание: ${draft.description ?? '—'}\n` +
+                `Начало: ${draft.startAt ? new Date(draft.startAt).toLocaleString('ru-RU') : '—'}\n` +
+                `Окончание: ${draft.endAt ? new Date(draft.endAt).toLocaleString('ru-RU') : '—'}`;
+
+            const keyboard = new InlineKeyboard()
+                .text('Создать', 'event:create:confirm')
+                .text('Отменить', 'event:create:cancel');
+
+            await this.safeReply(ctx, summary, keyboard);
+            return;
+        }
+    }
+
+    private async finalizeEventDraft(ctx: any, userId: string): Promise<void> {
+        const workspaceId = ctx.chat?.id?.toString() ?? '';
+        const session = await this.userSessionService.getOrCreate({
+            telegramUserId: ctx.from.id.toString(),
+            telegramChatId: ctx.chat.id.toString(),
+            workspaceId,
+        });
+        const draft = session.eventDraft;
+        if (!draft?.workspaceId || !draft.title || !draft.startAt || !draft.endAt) {
+            await this.safeReply(ctx, 'Данные для создания события не найдены. Начните заново.');
+            await this.cancelEventDraft(ctx, userId);
+            return;
+        }
+
+        try {
+            const created = await this.eventsService.createEvent({
+                userId,
+                dto: {
+                    workspaceId: draft.workspaceId,
+                    title: draft.title,
+                    description: draft.description ?? undefined,
+                    startAt: draft.startAt,
+                    endAt: draft.endAt,
+                },
+            });
+
+            session.eventDraft = null;
+            session.eventDraftStep = null;
+            session.updatedAt = new Date();
+            await this.userSessionService.save(session as any);
+
+            const keyboard = new InlineKeyboard()
+                .text('Пригласить участников', `event:${created.id}:invite`)
+                .text('Отменить событие', `event:${created.id}:cancel`);
+
+            await this.safeReply(ctx, 'Событие создано в статусе draft. Отправьте приглашения, когда будете готовы.', keyboard);
+        } catch (error) {
+            this.logger.warn('Ошибка создания события', error as any);
+            await this.safeReply(ctx, 'Не удалось создать событие. Попробуйте позже.');
+        }
+    }
+
+    private async cancelEventDraft(ctx: any, userId: string): Promise<void> {
+        const session = await this.userSessionService.getOrCreate({
+            telegramUserId: ctx.from.id.toString(),
+            telegramChatId: ctx.chat.id.toString(),
+            workspaceId: ctx.chat.id.toString(),
+        });
+        session.eventDraft = null;
+        session.eventDraftStep = null;
+        session.updatedAt = new Date();
+        await this.userSessionService.save(session as any);
+        await this.safeReply(ctx, 'Создание события отменено.');
+    }
+
+    private parseDateTime(value: string): Date | null {
+        const match = value.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):(\d{2})$/);
+        if (!match) return null;
+        const day = Number(match[1]);
+        const month = Number(match[2]);
+        const year = Number(match[3]);
+        const hours = Number(match[4]);
+        const minutes = Number(match[5]);
+        const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        if (Number.isNaN(date.getTime())) return null;
+        return date;
     }
 
     private async showWorkspaceEntry(ctx: any, userId: string): Promise<void> {
@@ -141,6 +397,11 @@ export class BotFlowDispatcher {
     }
 
     private async handleCallback(ctx: any, userId: string, callbackData: string): Promise<void> {
+        if (callbackData.startsWith('event:')) {
+            await this.handleEventCallback(ctx, userId, callbackData);
+            return;
+        }
+
         if (callbackData === 'ws:create') {
             await ctx.answerCallbackQuery({ text: 'Создание рабочего пространства', show_alert: false });
 
