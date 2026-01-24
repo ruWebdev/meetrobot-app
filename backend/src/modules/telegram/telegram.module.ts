@@ -8,15 +8,17 @@ import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { UserSessionService } from './user-session.service';
 import { BotFlowDispatcher } from './bot-flow-dispatcher.service';
 import { EventsModule } from '../events/events.module';
+import { TelegramNotificationService } from './telegram-notification.service';
 
 @Module({
     imports: [UserModule, WorkspaceModule, PrismaModule, RedisModule, forwardRef(() => EventsModule)],
     controllers: [TelegramController],
     providers: [
         TelegramService,
+        TelegramNotificationService,
         UserSessionService,
         BotFlowDispatcher,
     ],
-    exports: [TelegramService],
+    exports: [TelegramService, TelegramNotificationService],
 })
 export class TelegramModule { }

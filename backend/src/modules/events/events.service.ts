@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { EventReminderScheduler } from '../../infra/queue/event-reminder.scheduler';
-import { TelegramNotificationService } from '../../telegram/telegram-notification.service';
+import { TelegramNotificationService } from '../telegram/telegram-notification.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { WorkspaceService } from '../workspace/workspace.service';
 

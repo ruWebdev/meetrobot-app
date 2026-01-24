@@ -14,7 +14,7 @@ exports.EventsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infra/prisma/prisma.service");
 const event_reminder_scheduler_1 = require("../../infra/queue/event-reminder.scheduler");
-const telegram_notification_service_1 = require("../../telegram/telegram-notification.service");
+const telegram_notification_service_1 = require("../telegram/telegram-notification.service");
 const workspace_service_1 = require("../workspace/workspace.service");
 let EventsService = EventsService_1 = class EventsService {
     prisma;

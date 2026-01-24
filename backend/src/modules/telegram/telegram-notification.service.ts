@@ -1,6 +1,6 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { TelegramService } from '../modules/telegram/telegram.service';
+import { PrismaService } from '../../infra/prisma/prisma.service';
+import { TelegramService } from './telegram.service';
 import { InlineKeyboard } from 'grammy';
 
 @Injectable()

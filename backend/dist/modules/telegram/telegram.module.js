@@ -17,6 +17,7 @@ const prisma_module_1 = require("../../infra/prisma/prisma.module");
 const user_session_service_1 = require("./user-session.service");
 const bot_flow_dispatcher_service_1 = require("./bot-flow-dispatcher.service");
 const events_module_1 = require("../events/events.module");
+const telegram_notification_service_1 = require("./telegram-notification.service");
 let TelegramModule = class TelegramModule {
 };
 exports.TelegramModule = TelegramModule;
@@ -26,9 +27,10 @@ exports.TelegramModule = TelegramModule = __decorate([
         controllers: [telegram_controller_1.TelegramController],
         providers: [
             telegram_service_1.TelegramService,
+            telegram_notification_service_1.TelegramNotificationService,
             user_session_service_1.UserSessionService,
             bot_flow_dispatcher_service_1.BotFlowDispatcher,
         ],
-        exports: [telegram_service_1.TelegramService],
+        exports: [telegram_service_1.TelegramService, telegram_notification_service_1.TelegramNotificationService],
     })
 ], TelegramModule);

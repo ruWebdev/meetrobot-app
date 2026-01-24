@@ -22,7 +22,7 @@ exports.QueueModule = QueueModule = __decorate([
         imports: [
             config_1.ConfigModule,
             prisma_module_1.PrismaModule,
-            telegram_module_1.TelegramModule,
+            (0, common_1.forwardRef)(() => telegram_module_1.TelegramModule),
             bullmq_1.BullModule.forRootAsync({
                 imports: [config_1.ConfigModule],
                 inject: [config_1.ConfigService],
