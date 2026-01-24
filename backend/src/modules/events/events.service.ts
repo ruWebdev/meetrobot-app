@@ -48,7 +48,7 @@ export class EventsService {
         }
 
         const created = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-            const event = await (tx as any).event.create({
+            const event = await tx.event.create({
                 data: {
                     workspaceId: dto.workspaceId,
                     title,
@@ -60,7 +60,7 @@ export class EventsService {
                 },
             });
 
-            await (tx as any).eventParticipant.create({
+            await tx.eventParticipant.create({
                 data: {
                     eventId: event.id,
                     userId,
